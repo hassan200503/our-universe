@@ -9,16 +9,26 @@ export type Db = NodePgDatabase<typeof schema>;
 /**
  * One database handle per server process.
  *
- * - With DATABASE_URL set (production on Neon, or any Postgres) we use node-postgres.
- * - Without it we run an embedded PGlite database in `.data/` so the site works
- *   locally with zero setup, and migrate it on first use.
+ * - A Neon URL uses Neon's serverless driver: the Postgres protocol over a
+ *   WebSocket on port 443, which suits serverless hosts and gets through
+ *   networks that interfere with port 5432.
+ * - Any other DATABASE_URL uses node-postgres.
+ * - Without one we run an embedded PGlite database in `.data/` so the site
+ *   works locally with zero setup, and migrate it on first use.
  *
- * Both drivers expose the same Drizzle query API.
+ * All three expose the same Drizzle query API.
  */
 const globalForDb = globalThis as unknown as { __db?: Promise<Db> };
 
 async function create(): Promise<Db> {
   const url = process.env.DATABASE_URL;
+  if (url && /\.neon\.tech[/:?]/.test(url)) {
+    const { Pool } = await import("@neondatabase/serverless");
+    const { drizzle: drizzleNeon } = await import("drizzle-orm/neon-serverless");
+    // channel_binding isn't needed over the driver's own TLS WebSocket.
+    const pool = new Pool({ connectionString: url.replace(/[&?]channel_binding=require/, ""), max: 5 });
+    return drizzleNeon(pool, { schema }) as unknown as Db;
+  }
   if (url) {
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: url, max: 5 });
