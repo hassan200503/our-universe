@@ -48,6 +48,7 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
   const player = useRef<PlayerHandle>(null);
   const ready = useRef(false);
   const lastSeek = useRef(0);
+  const endedSent = useRef<string | null>(null);
   const blocked = useRef(false);
   const shown = useRef(new Set(initial.events.map((e) => e.id)));
 
@@ -140,6 +141,16 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
       } else if (!s.playing && p.playing()) {
         p.pause();
       }
+      // The shared clock says this track is over (e.g. it finished while I was away): move everyone on.
+      // The server only advances once per track, however many phones report it.
+      if (s.playing && d > 0 && want >= d - 0.25) {
+        const k = s.current?.id ?? s.youtube?.id;
+        if (k && endedSent.current !== k) {
+          endedSent.current = k;
+          send({ type: "ended", key: k });
+        }
+        return;
+      }
       const drift = p.time() - want;
       const tolerance = s.playing ? 1.2 : 0.35;
       if (Math.abs(drift) > tolerance && (!d || want < d - 0.5) && Date.now() - lastSeek.current > 2000) {
@@ -149,9 +160,11 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
       setInSync(Math.abs(drift) <= tolerance + 0.3);
     }, 500);
     return () => clearInterval(id);
-  }, [expected]);
+  }, [expected, send]);
 
-  useEffect(() => player.current?.setVolume(volume), [volume, key]);
+  useEffect(() => {
+    player.current?.setVolume(volume);
+  }, [volume, key]);
 
   // ── My controls (optimistic, then confirmed by the server).
   function optimistic(patch: Partial<State>) {
@@ -209,7 +222,9 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
 
   const chat = useMemo(() => events.filter((e) => e.kind === "chat" || e.kind === "system"), [events]);
   const chatEnd = useRef<HTMLDivElement>(null);
-  useEffect(() => chatEnd.current?.scrollIntoView({ block: "nearest" }), [chat.length]);
+  useEffect(() => {
+    chatEnd.current?.scrollIntoView({ block: "nearest" });
+  }, [chat.length]);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
