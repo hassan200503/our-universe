@@ -19,7 +19,8 @@ import path from "node:path";
 export type StorageMode = "blob" | "local" | "none";
 
 export function storageMode(): StorageMode {
-  if (process.env.BLOB_READ_WRITE_TOKEN) return "blob";
+  // A read-write token, or an OIDC-connected store (Vercel's default), both mean Blob.
+  if (process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID) return "blob";
   if (process.env.VERCEL) return "none";
   return "local";
 }
@@ -28,8 +29,9 @@ export const LOCAL_ROOT = path.join(process.cwd(), ".data", "media");
 
 export const LIMITS = {
   photo: 25 * 1024 * 1024,
-  song: 60 * 1024 * 1024,
-  video: 500 * 1024 * 1024,
+  // The free Blob plan holds 1 GB in total: keep single files modest; long videos go on YouTube.
+  song: 30 * 1024 * 1024,
+  video: 150 * 1024 * 1024,
   thumb: 2 * 1024 * 1024,
 } as const;
 

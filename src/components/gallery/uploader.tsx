@@ -112,7 +112,7 @@ export function Uploader({ enabled, disabledReason }: { enabled: boolean; disabl
             e.target.value = "";
           }}
         />
-        <p className="text-[0.7rem] text-muted">Photos up to 25 MB · videos up to 500 MB · audio up to 60 MB. Photos are resized for you.</p>
+        <p className="text-[0.7rem] text-muted">Photos are resized for you · videos up to 150 MB · audio up to 30 MB. For long videos, add them to YouTube (unlisted) and paste the link.</p>
       </div>
 
       <div className="card p-5">

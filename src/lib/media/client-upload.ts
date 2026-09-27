@@ -89,8 +89,8 @@ export async function audioDuration(file: File): Promise<number | null> {
 /** Sends one object to storage (Vercel Blob in production, our dev route locally). */
 export async function putObject(mode: "blob" | "local", path: string, body: Blob, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<void> {
   if (mode === "blob") {
-    const { upload } = await import("@vercel/blob/client");
-    await upload(path, body, {
+    const { uploadPresigned } = await import("@vercel/blob/client");
+    await uploadPresigned(path, body, {
       access: "private",
       handleUploadUrl: "/api/media/upload",
       contentType: body.type || undefined,
