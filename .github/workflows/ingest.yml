@@ -1,0 +1,33 @@
+# Refreshes the Live Trends Engine every two hours by running the ingest
+# script directly against the production database. Running it here instead of
+# through a web request avoids free-tier function timeouts.
+#
+# Secret needed: DATABASE_URL (Neon connection string).
+name: Ingest trends
+
+on:
+  schedule:
+    - cron: "17 */2 * * *" # every 2 hours, off the top of the hour
+  workflow_dispatch: {}
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: npm run ingest
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
