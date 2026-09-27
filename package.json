@@ -14,7 +14,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "retag": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/retag.ts",
-    "passcodes": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/passcodes.ts"
+    "passcodes": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/passcodes.ts",
+    "go-live": "node scripts/go-live.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

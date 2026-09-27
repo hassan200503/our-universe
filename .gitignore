@@ -46,3 +46,7 @@ next-env.d.ts
 
 # plain passcodes for handing over — never commit
 PASSCODES*.md
+
+# Netlify CLI link state and local deploy notes
+.netlify
+DEPLOYED.local.md
