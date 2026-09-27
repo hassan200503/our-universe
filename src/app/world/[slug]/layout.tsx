@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/lib/context";
 import { worldFor } from "@/lib/worlds";
+import { WorldEmblem } from "@/components/world-emblem";
 import { WorldTabs } from "./world-tabs";
 
 export default async function WorldLayout({ children, params }: LayoutProps<"/world/[slug]">) {
@@ -10,6 +11,7 @@ export default async function WorldLayout({ children, params }: LayoutProps<"/wo
   if (!person) notFound();
   const own = person.id === ctx.me.id;
   const first = person.displayName.split(" ")[0];
+  const motto = person.motto ?? worldFor(person.theme).tagline;
   const tabs = [
     { href: "", label: "Dashboard" },
     { href: "/journal", label: person.journalTitle },
@@ -21,16 +23,22 @@ export default async function WorldLayout({ children, params }: LayoutProps<"/wo
   ];
   return (
     <div data-world={person.theme}>
-      <header className={`bg-${person.theme} border-b border-line`}>
-        <div className="mx-auto max-w-6xl px-4 pt-10 sm:pt-14">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <div className="max-w-2xl">
+      <header className={`bg-${person.theme} grain relative overflow-hidden border-b border-line`}>
+        <div className="relative mx-auto max-w-6xl px-4 pt-10 sm:pt-14">
+          <div className="flex items-center justify-between gap-6">
+            <div className="max-w-2xl rise">
               <p className="eyebrow">{own ? "Your world" : `${first}'s world`}</p>
-              <h1 className="font-display mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">{person.displayName}</h1>
-              <p className={`mt-3 text-lg ${person.theme === "hassan" ? "font-mono text-base" : ""}`}>
+              <h1 className="display-xl mt-3">{person.displayName}</h1>
+              <p className={`mt-4 text-lg ${person.theme === "hassan" ? "font-mono text-base" : ""}`}>
                 {[person.course, person.headline ?? person.focus].filter(Boolean).join(" · ")}
               </p>
-              <p className="mt-2 text-sm italic text-muted">{person.motto ?? worldFor(person.theme).tagline}</p>
+              <p className={`mt-3 text-sm text-muted ${person.theme === "hassan" ? "font-mono" : "font-display italic"}`}>
+                {person.theme === "hassan" ? <span className="text-accent-2">$ </span> : null}
+                {motto}
+              </p>
+            </div>
+            <div className="hidden shrink-0 sm:block">
+              <WorldEmblem theme={person.theme} />
             </div>
           </div>
           <WorldTabs base={`/world/${person.slug}`} tabs={tabs} />

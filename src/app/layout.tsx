@@ -32,7 +32,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <Providers>
           <MeProvider me={me}>
             <Nav />
-            <main className="flex-1">{children}</main>
+            <main className={`flex-1 ${ctx ? "pb-24 sm:pb-0" : ""}`}>{children}</main>
           </MeProvider>
         </Providers>
       </body>

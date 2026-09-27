@@ -13,7 +13,8 @@
     "ingest": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/ingest.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "retag": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/retag.ts"
+    "retag": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/retag.ts",
+    "passcodes": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/passcodes.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

@@ -3,6 +3,7 @@ import { requireCtx } from "@/lib/context";
 import { story } from "@/lib/data";
 import { addMemory, deleteMemory, togglePlanDone } from "@/lib/actions/shared";
 import { ActionButton, ActionForm, ConfirmButton, Field } from "@/components/ui/forms";
+import { PhotoPicker } from "@/components/ui/photo-picker";
 import { Container, PageHeader } from "@/components/ui/page-header";
 import { day, isoDay } from "@/lib/ui/time";
 
@@ -129,8 +130,8 @@ export default async function StoryPage({ searchParams }: PageProps<"/story">) {
             )}
           </div>
 
-          <aside>
-            <div className="card sticky top-20 p-5">
+          <aside id="add" className="scroll-mt-20">
+            <div className="card-glow sticky top-20 p-5">
               <h2 className="font-display text-xl font-semibold">Add to our story</h2>
               <ActionForm action={addMemory} submit="Keep it" className="mt-3 space-y-3">
                 <Field label="What kind?" name="kind">
@@ -153,8 +154,8 @@ export default async function StoryPage({ searchParams }: PageProps<"/story">) {
                 <Field label="The story" name="body" hint="(optional)">
                   <textarea id="body" name="body" className="field" />
                 </Field>
-                <Field label="Photo link" name="photoUrl" hint="(optional, https://…)">
-                  <input id="photoUrl" name="photoUrl" type="url" className="field" />
+                <Field label="Photo" name="photo" hint="(optional)">
+                  <PhotoPicker />
                 </Field>
               </ActionForm>
             </div>

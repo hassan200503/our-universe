@@ -11,18 +11,13 @@
  * Skill levels are his own self-assessments on the portfolio's 1–5 scale.
  * Nothing is invented; Whitney's profile is left for her to fill in.
  */
-import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import bcrypt from "bcryptjs";
+import { passphrase } from "../src/lib/auth/passphrase";
 import { eq } from "drizzle-orm";
 import { getDb } from "../src/lib/db/client";
 import { interests, people, preferences, projects, radarItems, radarLanes, relationshipMembers, relationships, skills } from "../src/lib/db/schema";
 
-const WORDS = "amber river cedar falcon meadow lantern harbor willow summit ember orchid canyon maple heron coral tundra acacia savanna baobab kestrel".split(" ");
-function passphrase() {
-  const pick = () => WORDS[randomBytes(1)[0] % WORDS.length];
-  return `${pick()}-${pick()}-${pick()}-${randomBytes(2).readUInt16BE() % 100}`;
-}
 
 function passcodeFor(slug: "hassan" | "whitney"): string {
   const key = `SEED_${slug.toUpperCase()}_PASSCODE`;

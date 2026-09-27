@@ -1,10 +1,11 @@
 "use server";
 
+import bcrypt from "bcryptjs";
 import { and, eq, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/lib/db/client";
-import { interests, knowledgeEntries, learningRecords, people, preferences, projects, radarItems, radarLanes, skills } from "@/lib/db/schema";
+import { interests, knowledgeEntries, learningRecords, people, preferences, projects, radarItems, radarLanes, relationships, skills } from "@/lib/db/schema";
 import { requireCtx } from "@/lib/context";
 import { isTopicKey } from "@/lib/trends/topics";
 import { type ActionState, firstError, formObject, isoDate, list, optText, optUrl, reqText, today, visibilityField } from "./util";
@@ -292,4 +293,38 @@ export async function savePreferences(_: ActionState, fd: FormData): Promise<Act
   await db.insert(preferences).values({ personId, ...values }).onConflictDoUpdate({ target: preferences.personId, set: values });
   revalidatePath("/", "layout");
   return { ok: true, message: "Preferences saved" };
+}
+
+// ─── Account & relationship ───────────────────────────────────────────────
+
+export async function changePasscode(_: ActionState, fd: FormData): Promise<ActionState> {
+  const { db, personId } = await me();
+  const current = String(fd.get("current") ?? "");
+  const next = String(fd.get("next") ?? "");
+  const confirm = String(fd.get("confirm") ?? "");
+  if (next.length < 8) return { error: "Use at least 8 characters" };
+  if (next !== confirm) return { error: "The new passcodes don't match" };
+  const [row] = await db.select({ hash: people.passwordHash }).from(people).where(eq(people.id, personId));
+  if (!row || !(await bcrypt.compare(current, row.hash))) return { error: "Your current passcode isn't right" };
+  await db.update(people).set({ passwordHash: await bcrypt.hash(next, 12) }).where(eq(people.id, personId));
+  return { ok: true, message: "Passcode changed" };
+}
+
+const FEATURES = ["projects", "thinking"] as const;
+
+export async function saveFeatures(_: ActionState, fd: FormData): Promise<ActionState> {
+  const { db, personId } = await me();
+  const chosen = fd.getAll("feature").map(String).filter((f): f is (typeof FEATURES)[number] => (FEATURES as readonly string[]).includes(f));
+  await db.update(people).set({ features: chosen }).where(eq(people.id, personId));
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Sections updated" };
+}
+
+export async function saveRelationship(_: ActionState, fd: FormData): Promise<ActionState> {
+  const { ctx, db } = await me();
+  const parsed = z.object({ name: reqText(80), startedOn: isoDate.optional() }).safeParse(formObject(fd));
+  if (!parsed.success) return { error: firstError(parsed.error) };
+  await db.update(relationships).set({ name: parsed.data.name, startedOn: parsed.data.startedOn ?? null }).where(eq(relationships.id, ctx.relationship.id));
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Saved ❤️" };
 }

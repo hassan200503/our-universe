@@ -309,3 +309,24 @@ export const savedDiscoveries = pgTable(
 
 export type Person = typeof people.$inferSelect;
 export type Trend = typeof trends.$inferSelect;
+
+/**
+ * Photos, stored in Postgres so no paid image host is needed. Browsers
+ * compress to ≤1600px WebP (~150–400 KB) before upload; Neon's free storage
+ * holds a couple of thousand of these.
+ */
+export const photos = pgTable(
+  "photos",
+  {
+    id: id(),
+    relationshipId: uuid("relationship_id").notNull().references(() => relationships.id, { onDelete: "cascade" }),
+    uploadedBy: uuid("uploaded_by").notNull().references(() => people.id),
+    mime: text("mime").notNull(),
+    bytes: text("bytes").notNull(), // base64: portable across PGlite and node-postgres
+    width: integer("width"),
+    height: integer("height"),
+    caption: text("caption"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("photos_rel_created").on(t.relationshipId, t.createdAt)],
+);

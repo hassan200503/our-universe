@@ -8,15 +8,17 @@ This uses the same cardless services as RentManager: **Neon** (Postgres), **Netl
 
 1. Sign up at neon.tech with GitHub (no card).
 2. Create a project, then copy the **pooled** connection string (`…-pooler…/neondb?sslmode=require`).
-3. From your machine, run the migrations and seed against it:
+3. From your machine, run the migrations, seed, passcodes and first ingest against it:
 
    ```bash
-   DATABASE_URL="postgres://…" SEED_HASSAN_PASSCODE="…" SEED_WHITNEY_PASSCODE="…" npm run db:migrate
-   DATABASE_URL="postgres://…" SEED_HASSAN_PASSCODE="…" SEED_WHITNEY_PASSCODE="…" npm run seed
-   DATABASE_URL="postgres://…" npm run ingest -- --force
+   export DATABASE_URL="postgres://…"
+   npm run db:migrate
+   npm run seed
+   npm run passcodes -- --reuse   # applies the passcodes already in PASSCODES.local.md
+   npm run ingest -- --force
    ```
 
-   Choose the two passcodes yourselves and share Whitney's with her privately.
+   `PASSCODES.local.md` (git-ignored) holds each person's passcode. Leave out `--reuse` to issue fresh ones. Give Whitney hers privately; either of you can change your own passcode later in Settings → Passcode.
 
 Neon's free compute scales to zero when idle, so the first visit after a quiet spell takes a second or two longer. Unlike Render's free Postgres, your data is not deleted.
 

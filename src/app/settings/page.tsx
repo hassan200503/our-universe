@@ -6,8 +6,9 @@ import { preferences } from "@/lib/db/schema";
 import { personTopics } from "@/lib/trends/query";
 import { SOURCES } from "@/lib/trends/sources";
 import { TOPICS, TOPIC_KEYS } from "@/lib/trends/topics";
-import { saveInterests, savePreferences, saveProfile } from "@/lib/actions/personal";
+import { changePasscode, saveFeatures, saveInterests, savePreferences, saveProfile, saveRelationship } from "@/lib/actions/personal";
 import { ActionForm, Field } from "@/components/ui/forms";
+import { logout } from "@/lib/actions/auth";
 import { Container, PageHeader } from "@/components/ui/page-header";
 
 export const metadata = { title: "Settings" };
@@ -25,6 +26,9 @@ export default async function SettingsPage() {
     <>
       <PageHeader world={me.theme} eyebrow="Settings" title={`Your settings, ${me.displayName.split(" ")[0]}`}>
         Everything here can be changed back at any time.
+        <form action={logout} className="mt-4">
+          <button className="btn btn-ghost">Sign out</button>
+        </form>
       </PageHeader>
       <Container world={me.theme}>
         <div className="grid gap-8 lg:grid-cols-2">
@@ -82,6 +86,47 @@ export default async function SettingsPage() {
                     </label>
                   ))}
                 </div>
+              </ActionForm>
+            </section>
+
+<section id="us" data-world="us" className="card-glow scroll-mt-20 p-5">
+              <h2 className="font-display text-xl font-semibold">Us ❤️</h2>
+              <p className="text-sm text-muted">Shared by both of you. The start date powers the days-together counter and anniversaries.</p>
+              <ActionForm action={saveRelationship} submit="Save" resetOnSuccess={false} className="mt-3 space-y-3">
+                <Field label="What do you call your universe?" name="rel-name">
+                  <input id="rel-name" name="name" required defaultValue={ctx.relationship.name} className="field" />
+                </Field>
+                <Field label="The day it all began" name="startedOn">
+                  <input id="startedOn" name="startedOn" type="date" defaultValue={ctx.relationship.startedOn ?? ""} className="field" />
+                </Field>
+              </ActionForm>
+            </section>
+
+            <section className="card p-5">
+              <h2 className="font-display text-xl font-semibold">Your sections</h2>
+              <p className="text-sm text-muted">Optional areas in your world.</p>
+              <ActionForm action={saveFeatures} submit="Save sections" resetOnSuccess={false} className="mt-3 space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="feature" value="projects" defaultChecked={me.features.includes("projects")} /> 🛠️ Things I&apos;m Building (projects)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="feature" value="thinking" defaultChecked={me.features.includes("thinking")} /> 🧠 Questions I&apos;m Thinking About
+                </label>
+              </ActionForm>
+            </section>
+
+            <section className="card p-5">
+              <h2 className="font-display text-xl font-semibold">Passcode</h2>
+              <ActionForm action={changePasscode} submit="Change passcode" className="mt-3 space-y-3">
+                <Field label="Current passcode" name="current">
+                  <input id="current" name="current" type="password" autoComplete="current-password" required className="field" />
+                </Field>
+                <Field label="New passcode" name="next" hint="(8+ characters)">
+                  <input id="next" name="next" type="password" autoComplete="new-password" minLength={8} required className="field" />
+                </Field>
+                <Field label="New passcode again" name="confirm">
+                  <input id="confirm" name="confirm" type="password" autoComplete="new-password" minLength={8} required className="field" />
+                </Field>
               </ActionForm>
             </section>
 

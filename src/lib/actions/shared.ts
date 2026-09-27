@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/lib/db/client";
-import { knowledgeEntries, memories, savedDiscoveries, sharedLearning, trends } from "@/lib/db/schema";
+import { knowledgeEntries, memories, photos, savedDiscoveries, sharedLearning, trends } from "@/lib/db/schema";
 import { requireCtx } from "@/lib/context";
 import { type ActionState, firstError, formObject, isoDate, optText, optUrl, reqText, today } from "./util";
 
@@ -103,7 +103,8 @@ const memory = z.object({
   body: optText(5000),
   occurredOn: isoDate,
   place: optText(200),
-  photoUrl: optUrl,
+  // An uploaded photo (/api/photos/<id>) or an external https link.
+  photoUrl: z.union([z.string().regex(/^\/api\/photos\/[0-9a-f-]{36}$/i), optUrl]).optional(),
 });
 
 export async function addMemory(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -130,7 +131,10 @@ export async function deleteMemory(id: string) {
   const ctx = await requireCtx();
   const db = await getDb();
   // Either partner can remove a shared memory, but only within their relationship.
-  await db.delete(memories).where(and(eq(memories.id, id), eq(memories.relationshipId, ctx.relationship.id)));
+  const [gone] = await db.delete(memories).where(and(eq(memories.id, id), eq(memories.relationshipId, ctx.relationship.id))).returning();
+  // An uploaded photo belongs to its memory; remove it too so storage doesn't fill with orphans.
+  const photoId = gone?.photoUrl?.match(/^\/api\/photos\/([0-9a-f-]{36})$/i)?.[1];
+  if (photoId) await db.delete(photos).where(and(eq(photos.id, photoId), eq(photos.relationshipId, ctx.relationship.id)));
   revalidatePath("/story");
 }
 

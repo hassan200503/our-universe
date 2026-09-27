@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, count, desc, eq, gte, ilike, inArray, or, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { getDb } from "@/lib/db/client";
-import { knowledgeEntries, learningRecords, memories, people, projects, radarItems, radarLanes, savedDiscoveries, sharedLearning, skills, trends } from "@/lib/db/schema";
+import { knowledgeEntries, learningRecords, memories, people, photos, projects, radarItems, radarLanes, savedDiscoveries, sharedLearning, skills, trends } from "@/lib/db/schema";
 import { type Ctx, visibleTo } from "@/lib/context";
 
 /**
@@ -174,4 +174,46 @@ export async function searchAll(ctx: Ctx, q: string): Promise<SearchHit[]> {
     ...kn.map((k) => ({ kind: k.space === "thinking" ? "Thinking journal" : "Knowledge Vault", title: k.title, snippet: k.body, href: `/world/${name(k.personId)?.slug}/${k.space}?q=${encodeURIComponent(q)}`, owner: name(k.personId)?.displayName, date: d(k.createdAt) })),
     ...found.map((t) => ({ kind: `Discovery · ${t.sourceName}`, title: t.title, snippet: t.summary, href: `/discover/item/${t.id}`, date: d(t.publishedAt) })),
   ];
+}
+
+/** Memories from today's date in earlier years. */
+export async function onThisDay(ctx: Ctx, today: Date) {
+  const db = await getDb();
+  const m = today.getUTCMonth() + 1;
+  const d = today.getUTCDate();
+  return db
+    .select()
+    .from(memories)
+    .where(
+      and(
+        eq(memories.relationshipId, ctx.relationship.id),
+        sql`extract(month from ${memories.occurredOn}) = ${m}`,
+        sql`extract(day from ${memories.occurredOn}) = ${d}`,
+        sql`extract(year from ${memories.occurredOn}) < ${today.getUTCFullYear()}`,
+      ),
+    )
+    .orderBy(desc(memories.occurredOn));
+}
+
+export async function recentPhotos(ctx: Ctx, limit = 8) {
+  const db = await getDb();
+  return db
+    .select({ id: photos.id, width: photos.width, height: photos.height, caption: photos.caption, createdAt: photos.createdAt })
+    .from(photos)
+    .where(eq(photos.relationshipId, ctx.relationship.id))
+    .orderBy(desc(photos.createdAt))
+    .limit(limit);
+}
+
+/** Days together and the next anniversary, from the relationship's start date. */
+export function together(startedOn: string | null, now: Date) {
+  if (!startedOn) return null;
+  const start = new Date(`${startedOn}T00:00:00Z`);
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const days = Math.floor((today.getTime() - start.getTime()) / 86400_000);
+  if (days < 0) return null;
+  let next = new Date(Date.UTC(today.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+  if (next < today) next = new Date(Date.UTC(today.getUTCFullYear() + 1, start.getUTCMonth(), start.getUTCDate()));
+  const years = next.getUTCFullYear() - start.getUTCFullYear();
+  return { days, years: Math.floor(days / 365.25), nextAnniversary: next.toISOString().slice(0, 10), nextYears: years, daysToAnniversary: Math.round((next.getTime() - today.getTime()) / 86400_000) };
 }
