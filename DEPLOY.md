@@ -1,6 +1,13 @@
 # Deploying Our Universe for free (no credit card)
 
-This uses the same cardless services as RentManager: **Neon** (Postgres), **Netlify** (the website) and **GitHub Actions** (the scheduled trend refresh).
+Hosting: **Neon** (Postgres), **Vercel Hobby** (the website — free, no card, personal non-commercial use) and **GitHub Actions** (the scheduled trend refresh). Netlify works too (netlify.toml is included), but the Netlify team used for RentManager had run out of free credits in September 2026, which pauses production deploys.
+
+## Quickest path: Vercel
+
+1. Sign in at vercel.com with GitHub.
+2. **Add New → Project →** import `hassan200503/our-universe` (allow Vercel access to that repository).
+3. Add one environment variable, `DATABASE_URL` (the Neon pooled string). Session cookies are signed with a key derived from it, so nothing else is required.
+4. Deploy. Every push to `main` redeploys automatically.
 
 > Free-tier limits change. Before relying on them, re-check each provider's current pricing page: Neon's free plan, Netlify's free plan (function timeouts, build minutes), and GitHub Actions minutes for **private** repositories.
 
