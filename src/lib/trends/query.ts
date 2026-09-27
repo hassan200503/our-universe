@@ -301,7 +301,7 @@ export async function randomTrend(topic: TopicKey, exclude?: string | null): Pro
   const [row] = await db
     .select()
     .from(trends)
-    .where(and(eq(trends.topic, topic), topic === "birds" ? eq(trends.contentType, "observation") : undefined, exclude ? sql`${trends.id} <> ${exclude}::uuid` : undefined))
+    .where(and(eq(trends.topic, topic), topic === "birds" ? inArray(trends.contentType, ["observation", "sound"]) : undefined, exclude ? sql`${trends.id} <> ${exclude}::uuid` : undefined))
     .orderBy(sql`random()`)
     .limit(1);
   return row ? (await attachReactions([row]))[0] : null;

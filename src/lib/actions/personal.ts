@@ -232,6 +232,7 @@ const profile = z.object({
   focus: optText(120),
   intro: optText(3000),
   motto: optText(200),
+  birthday: isoDate.optional(),
   publicProfile: z.enum(["on"]).optional(),
 });
 
@@ -250,6 +251,7 @@ export async function saveProfile(_: ActionState, fd: FormData): Promise<ActionS
       focus: d.focus ?? null,
       intro: d.intro ?? null,
       motto: d.motto ?? null,
+      birthday: d.birthday ?? null,
       publicProfile: d.publicProfile === "on",
     })
     .where(eq(people.id, personId));
@@ -322,9 +324,9 @@ export async function saveFeatures(_: ActionState, fd: FormData): Promise<Action
 
 export async function saveRelationship(_: ActionState, fd: FormData): Promise<ActionState> {
   const { ctx, db } = await me();
-  const parsed = z.object({ name: reqText(80), startedOn: isoDate.optional() }).safeParse(formObject(fd));
+  const parsed = z.object({ name: reqText(80), startedOn: isoDate.optional(), nextMeetOn: isoDate.optional() }).safeParse(formObject(fd));
   if (!parsed.success) return { error: firstError(parsed.error) };
-  await db.update(relationships).set({ name: parsed.data.name, startedOn: parsed.data.startedOn ?? null }).where(eq(relationships.id, ctx.relationship.id));
+  await db.update(relationships).set({ name: parsed.data.name, startedOn: parsed.data.startedOn ?? null, nextMeetOn: parsed.data.nextMeetOn ?? null }).where(eq(relationships.id, ctx.relationship.id));
   revalidatePath("/", "layout");
   return { ok: true, message: "Saved ❤️" };
 }

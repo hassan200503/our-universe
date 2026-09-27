@@ -1,5 +1,6 @@
 import {
   pgTable,
+  bigserial,
   text,
   timestamp,
   integer,
@@ -51,6 +52,11 @@ export const people = pgTable("people", {
   /** Optional sections this person uses: "projects", "thinking". */
   features: text("features").array().notNull().default(sql`'{}'::text[]`),
   publicProfile: boolean("public_profile").notNull().default(false),
+  /** Storage pathname of the profile picture (see src/lib/media/storage.ts). */
+  avatarPath: text("avatar_path"),
+  birthday: date("birthday"),
+  /** When this person last opened the gallery: drives the "new" badge. */
+  gallerySeenAt: timestamp("gallery_seen_at", { withTimezone: true }),
   passwordHash: text("password_hash").notNull(),
   createdAt: createdAt(),
 });
@@ -59,6 +65,8 @@ export const relationships = pgTable("relationships", {
   id: id(),
   name: text("name").notNull(),
   startedOn: date("started_on"),
+  /** The next time they will be together in person: the countdown on the home page. */
+  nextMeetOn: date("next_meet_on"),
   createdAt: createdAt(),
 });
 
@@ -260,6 +268,14 @@ export type TrendExtra = {
   factUrl?: string;
   observer?: string;
   iconicTaxon?: string;
+  /** YouTube video id: the card plays inline and can be watched together. */
+  youtubeId?: string;
+  /** A real recording (e.g. a bird song) with its own licence and credit. */
+  audioUrl?: string;
+  audioCredit?: string;
+  audioLicense?: string;
+  /** Where the image came from: the feed itself, the article preview, or a licensed photo. */
+  imageOrigin?: "feed" | "preview" | "licensed" | "youtube" | "none";
 };
 
 export const trends = pgTable(
@@ -329,4 +345,118 @@ export const photos = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("photos_rel_created").on(t.relationshipId, t.createdAt)],
+);
+
+// ─── Gallery ──────────────────────────────────────────────────────────────
+
+/**
+ * Everything either of you posts: photos, videos, songs. Files live in object
+ * storage (private); YouTube songs and videos are stored as their video id.
+ */
+export const media = pgTable(
+  "media",
+  {
+    id: id(),
+    relationshipId: uuid("relationship_id").notNull().references(() => relationships.id, { onDelete: "cascade" }),
+    addedBy: uuid("added_by").notNull().references(() => people.id),
+    /** photo | video | song */
+    kind: text("kind").notNull(),
+    /** upload | youtube */
+    source: text("source").notNull(),
+    path: text("path"),
+    thumbPath: text("thumb_path"),
+    youtubeId: text("youtube_id"),
+    mime: text("mime"),
+    bytes: integer("bytes"),
+    width: integer("width"),
+    height: integer("height"),
+    durationSec: real("duration_sec"),
+    title: text("title"),
+    artist: text("artist"),
+    caption: text("caption"),
+    takenOn: date("taken_on"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("media_rel_created").on(t.relationshipId, t.createdAt, t.id), index("media_rel_kind").on(t.relationshipId, t.kind, t.createdAt)],
+);
+
+export const mediaReactions = pgTable(
+  "media_reactions",
+  {
+    mediaId: uuid("media_id").notNull().references(() => media.id, { onDelete: "cascade" }),
+    personId: uuid("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.mediaId, t.personId] })],
+);
+
+export const mediaComments = pgTable(
+  "media_comments",
+  {
+    id: id(),
+    mediaId: uuid("media_id").notNull().references(() => media.id, { onDelete: "cascade" }),
+    personId: uuid("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("media_comments_media").on(t.mediaId, t.createdAt)],
+);
+
+// ─── Together: presence, the shared room, and its live events ─────────────
+
+/** Heartbeat per person: online = seen in the last ~70 seconds. */
+export const presence = pgTable("presence", {
+  personId: uuid("person_id").primaryKey().references(() => people.id, { onDelete: "cascade" }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Which part of the site they're on, e.g. "room", "gallery". */
+  place: text("place"),
+});
+
+/**
+ * The shared player. Everyone in the relationship sees the same row; clients
+ * poll it and steer their own player to match. `version` guards against two
+ * people pressing a button at the same moment.
+ */
+export const roomState = pgTable("room_state", {
+  relationshipId: uuid("relationship_id").primaryKey().references(() => relationships.id, { onDelete: "cascade" }),
+  version: integer("version").notNull().default(0),
+  mediaId: uuid("media_id").references(() => media.id, { onDelete: "set null" }),
+  /** For discovery videos (knitting tutorials, bird videos) that aren't in the gallery. */
+  youtubeId: text("youtube_id"),
+  title: text("title"),
+  playing: boolean("playing").notNull().default(false),
+  /** Seconds into the track at `updatedAt`. */
+  position: real("position").notNull().default(0),
+  queue: uuid("queue").array().notNull().default(sql`'{}'::uuid[]`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").references(() => people.id),
+});
+
+/** Chat lines, floating reactions and "thinking of you" nudges, in order. */
+export const roomEvents = pgTable(
+  "room_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    relationshipId: uuid("relationship_id").notNull().references(() => relationships.id, { onDelete: "cascade" }),
+    personId: uuid("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    /** chat | react | nudge | system */
+    kind: text("kind").notNull(),
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("room_events_rel_id").on(t.relationshipId, t.id)],
+);
+
+/** One answer each to the question of the day. */
+export const dailyAnswers = pgTable(
+  "daily_answers",
+  {
+    relationshipId: uuid("relationship_id").notNull().references(() => relationships.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    personId: uuid("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    answer: text("answer").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.relationshipId, t.day, t.personId] })],
 );

@@ -11,7 +11,7 @@ export type NormalizedItem = {
   imageUrl: string | null;
   imageCredit: string | null;
   imageLicense: string | null;
-  contentType: "article" | "paper" | "essay" | "encyclopedia" | "observation";
+  contentType: "article" | "paper" | "essay" | "encyclopedia" | "observation" | "video" | "community" | "sound";
   extra: TrendExtra | null;
   /** Extra text that category rules may match on but that isn't displayed. */
   ruleHints?: string;
@@ -88,7 +88,8 @@ export function excerpt(text: string | null | undefined, max = 280): string | nu
     .replace(/The post .* appeared first on .*$/i, "")
     .replace(/Continue reading.*$/i, "")
     .trim();
-  if (!clean) return null;
+  // "…" or "[…]" on its own is not a summary.
+  if (!clean || !/[\p{L}\p{N}]/u.test(clean)) return null;
   if (clean.length <= max) return clean;
   const cut = clean.slice(0, max);
   const sentence = cut.lastIndexOf(". ");

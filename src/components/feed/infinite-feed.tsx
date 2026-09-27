@@ -115,8 +115,8 @@ export function InfiniteFeed({ params, topics, empty }: { params: FeedParams; to
       )}
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((it) => (
-          <TrendCardView key={it.id} item={it} />
+        {items.map((it, i) => (
+          <TrendCardView key={it.id} item={it} priority={i < 3} />
         ))}
         {(q.isPending || isFetchingNextPage) && Array.from({ length: q.isPending ? 6 : 3 }, (_, i) => <Skeleton key={i} />)}
       </div>

@@ -217,3 +217,23 @@ export function together(startedOn: string | null, now: Date) {
   const years = next.getUTCFullYear() - start.getUTCFullYear();
   return { days, years: Math.floor(days / 365.25), nextAnniversary: next.toISOString().slice(0, 10), nextYears: years, daysToAnniversary: Math.round((next.getTime() - today.getTime()) / 86400_000) };
 }
+
+/** Days until a birthday (0 = today) and the age being turned, in Nairobi time. */
+export function birthdayInfo(birthday: string | null, now: Date) {
+  if (!birthday) return null;
+  const [y, m, d] = birthday.split("-").map(Number);
+  const local = new Date(now.getTime() + 3 * 3600_000);
+  const today = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+  let next = Date.UTC(local.getUTCFullYear(), m - 1, d);
+  if (next < today) next = Date.UTC(local.getUTCFullYear() + 1, m - 1, d);
+  return { days: Math.round((next - today) / 86400_000), turning: new Date(next).getUTCFullYear() - y, date: new Date(next).toISOString().slice(0, 10) };
+}
+
+/** Days until an ISO date (0 = today), or null if it has passed. */
+export function daysUntil(isoDate: string | null, now: Date) {
+  if (!isoDate) return null;
+  const local = new Date(now.getTime() + 3 * 3600_000);
+  const today = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+  const d = Math.round((Date.parse(`${isoDate}T00:00:00Z`) - today) / 86400_000);
+  return d >= 0 ? d : null;
+}

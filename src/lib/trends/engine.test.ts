@@ -37,7 +37,10 @@ describe("categorisation", () => {
   it("assigns the first matching category and falls back per topic", () => {
     expect(categorize("software", "JDK 27 lands with a new JEP")).toBe("Java");
     expect(categorize("biotech", "CRISPR base editing fixes a mutation")).toBe("CRISPR & gene editing");
-    expect(categorize("birds", "observation: Aves")).toBe("Sighting in Kenya");
+    expect(categorize("birds", "observation: Aves")).toBe("Fresh sightings");
+    expect(categorize("birds", "sound: Aves")).toBe("Bird songs");
+    expect(categorize("knitting", "video: How to cast on")).toBe("Video tutorials");
+    expect(categorize("knitting", "community: My first sweater")).toBe("Community makes");
     expect(categorize("knitting", "A quiet afternoon")).toBe("Inspiration");
   });
   it("does not mistake a developer 'environment' for climate", () => {

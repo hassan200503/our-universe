@@ -3,6 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { Nav } from "@/components/nav";
 import { MeProvider } from "@/components/me-context";
+import { PulseProvider } from "@/components/pulse";
 import { getCtx } from "@/lib/context";
 import "./globals.css";
 
@@ -25,14 +26,22 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const ctx = await getCtx();
-  const me = ctx ? { id: ctx.me.id, slug: ctx.me.slug, displayName: ctx.me.displayName, theme: ctx.me.theme } : null;
+  const pick = (p: NonNullable<typeof ctx>["me"]) => ({ id: p.id, slug: p.slug, displayName: p.displayName, theme: p.theme, avatarUrl: p.avatarUrl });
+  const me = ctx ? pick(ctx.me) : null;
+  const members = ctx ? ctx.members.map(pick) : [];
   return (
     <html lang="en" className={`${inter.variable} ${fraunces.variable} ${jetbrains.variable} h-full`}>
       <body className="min-h-full flex flex-col">
         <Providers>
-          <MeProvider me={me}>
-            <Nav />
-            <main className={`flex-1 ${ctx ? "pb-24 sm:pb-0" : ""}`}>{children}</main>
+          <MeProvider me={me} members={members}>
+            {ctx ? (
+              <PulseProvider>
+                <Nav />
+                <main className="flex-1 pb-24 sm:pb-0">{children}</main>
+              </PulseProvider>
+            ) : (
+              <main className="flex-1">{children}</main>
+            )}
           </MeProvider>
         </Providers>
       </body>

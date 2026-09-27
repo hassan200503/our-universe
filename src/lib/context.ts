@@ -5,13 +5,15 @@ import { and, eq, ne } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { people, relationshipMembers, relationships, type Person } from "@/lib/db/schema";
 import { readSession } from "@/lib/auth/session";
+import { viewUrl } from "@/lib/media/storage";
 
-export type PublicPerson = Omit<Person, "passwordHash">;
+export type PublicPerson = Omit<Person, "passwordHash"> & { avatarUrl: string | null };
 
-function strip(p: Person): PublicPerson {
+async function strip(p: Person): Promise<PublicPerson> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { passwordHash, ...rest } = p;
-  return rest;
+  const avatarUrl = p.avatarPath ? await viewUrl(p.avatarPath).catch(() => null) : null;
+  return { ...rest, avatarUrl };
 }
 
 export type Ctx = {
@@ -41,8 +43,8 @@ export const getCtx = cache(async (): Promise<Ctx | null> => {
     .from(relationshipMembers)
     .innerJoin(people, eq(people.id, relationshipMembers.personId))
     .where(and(eq(relationshipMembers.relationshipId, link.r.id), ne(people.id, me.id)));
-  const partners = others.map((o) => strip(o.p));
-  return { me: strip(me), relationship: link.r, partners, members: [strip(me), ...partners] };
+  const [meP, ...partners] = await Promise.all([strip(me), ...others.map((o) => strip(o.p))]);
+  return { me: meP, relationship: link.r, partners, members: [meP, ...partners] };
 });
 
 /** For pages and actions: the context, or a redirect to sign in. */

@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { requireCtx, type PublicPerson } from "@/lib/context";
-import { onThisDay, recentPhotos, story, together } from "@/lib/data";
+import { birthdayInfo, daysUntil, onThisDay, story, together } from "@/lib/data";
+import { recentMedia } from "@/lib/media/queries";
+import { todaysQuestion } from "@/lib/together/daily";
+import { TogetherNow } from "@/components/home/together-now";
+import { QuestionCard } from "@/components/home/question-card";
+import { Avatar } from "@/components/avatar";
 import { personTopics, todaysDiscovery, type TrendCard } from "@/lib/trends/query";
 import { TOPICS, type TopicKey } from "@/lib/trends/topics";
 import { TrendCardView } from "@/components/feed/trend-card";
@@ -54,15 +59,22 @@ export default async function Home() {
   const topicsBy = new Map(await Promise.all(members.map(async (m) => [m.id, await personTopics(m.id)] as const)));
   const mainTopic = (id: string) => topicsBy.get(id)?.find((t) => t !== "nature");
   const partner = ctx.partners[0];
-  const [recent, photos, memoriesToday, mine, theirs, shared] = await Promise.all([
+  const [recent, photos, memoriesToday, mine, theirs, shared, question] = await Promise.all([
     story(ctx, { limit: 4 }),
-    recentPhotos(ctx, 6),
+    recentMedia(ctx, 7).then((m) => m.filter((x) => x.thumbUrl)),
     onThisDay(ctx, now),
     todaysDiscovery({ topics: mainTopic(ctx.me.id) ? [mainTopic(ctx.me.id)!] : [], seed: ctx.me.slug }),
     partner ? todaysDiscovery({ topics: mainTopic(partner.id) ? [mainTopic(partner.id)!] : [], seed: partner.slug }) : Promise.resolve(null),
     todaysDiscovery({ topics: [], seed: "together", bridge: true }),
+    todaysQuestion(ctx, now),
   ]);
   const t = together(ctx.relationship.startedOn, now);
+  const meetIn = daysUntil(ctx.relationship.nextMeetOn, now);
+  const birthdays = members
+    .map((m) => ({ m, b: birthdayInfo(m.birthday, now) }))
+    .filter((x): x is { m: PublicPerson; b: NonNullable<ReturnType<typeof birthdayInfo>> } => !!x.b && x.b.days <= 45)
+    .sort((x, y) => x.b.days - y.b.days);
+  const birthdayToday = birthdays.find((x) => x.b.days === 0);
   const [a, b] = members;
   const firstOf = (p?: PublicPerson) => p?.displayName.split(" ")[0] ?? "";
 
@@ -79,16 +91,32 @@ export default async function Home() {
             <p className="mx-auto mt-5 max-w-md text-lg leading-relaxed text-muted lg:mx-0">
               Welcome back, {firstOf(ctx.me)}. Two worlds — {firstOf(a)}&apos;s and {firstOf(b)}&apos;s — connected by the story you&apos;re writing together.
             </p>
-            {t ? (
+            {t || meetIn !== null || birthdays.length ? (
               <div className="mt-7 flex flex-wrap justify-center gap-3 lg:justify-start">
-                <div className="card-glow px-5 py-3">
-                  <p className="font-display text-3xl font-semibold text-accent">{t.days.toLocaleString()}</p>
-                  <p className="text-xs text-muted">days together</p>
-                </div>
-                <div className="card-glow px-5 py-3">
-                  <p className="font-display text-3xl font-semibold">{t.daysToAnniversary === 0 ? "Today 🌹" : t.daysToAnniversary}</p>
-                  <p className="text-xs text-muted">{t.daysToAnniversary === 0 ? `your ${ordinal(t.nextYears)} anniversary` : `days to your ${ordinal(t.nextYears)} anniversary`}</p>
-                </div>
+                {meetIn !== null && (
+                  <div className="card-glow px-5 py-3">
+                    <p className="font-display text-3xl font-semibold text-accent">{meetIn === 0 ? "Today ✈️" : meetIn}</p>
+                    <p className="text-xs text-muted">{meetIn === 0 ? "you're together today!" : "days until you're together"}</p>
+                  </div>
+                )}
+                {t && (
+                  <>
+                    <div className="card-glow px-5 py-3">
+                      <p className="font-display text-3xl font-semibold text-accent">{t.days.toLocaleString()}</p>
+                      <p className="text-xs text-muted">days together</p>
+                    </div>
+                    <div className="card-glow px-5 py-3">
+                      <p className="font-display text-3xl font-semibold">{t.daysToAnniversary === 0 ? "Today 🌹" : t.daysToAnniversary}</p>
+                      <p className="text-xs text-muted">{t.daysToAnniversary === 0 ? `your ${ordinal(t.nextYears)} anniversary` : `days to your ${ordinal(t.nextYears)} anniversary`}</p>
+                    </div>
+                  </>
+                )}
+                {birthdays.map(({ m, b }) => (
+                  <div key={m.id} data-world={m.theme} className="card-glow px-5 py-3">
+                    <p className="font-display text-3xl font-semibold text-accent">{b.days === 0 ? "Today 🎂" : b.days}</p>
+                    <p className="text-xs text-muted">{b.days === 0 ? `${firstOf(m)}'s birthday!` : `days to ${firstOf(m)}'s birthday 🎂`}</p>
+                  </div>
+                ))}
               </div>
             ) : (
               <Link href="/settings#us" className="mt-7 inline-block text-sm text-accent underline-offset-4 hover:underline">
@@ -108,6 +136,22 @@ export default async function Home() {
             <Universe left={firstOf(a)} right={firstOf(b)} />
           </div>
         </div>
+      </section>
+
+      {/* ── RIGHT NOW ────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl space-y-5 px-4 pt-8">
+        {birthdayToday && (
+          <div data-world={birthdayToday.m.theme} className="card-glow rise relative overflow-hidden p-6 text-center">
+            <div className="pointer-events-none absolute inset-x-0 top-2 text-3xl tracking-[1em] opacity-40 motion-safe:animate-pulse" aria-hidden>
+              🎈🎉🎂💖🎁✨
+            </div>
+            <Avatar name={birthdayToday.m.displayName} url={birthdayToday.m.avatarUrl} theme={birthdayToday.m.theme} size={84} ring className="relative mt-6" />
+            <p className="font-display relative mt-3 text-3xl font-semibold">Happy birthday, {firstOf(birthdayToday.m)}! 🎂</p>
+            <p className="relative mt-1 text-muted">{birthdayToday.m.id === ctx.me.id ? "Today is all about you ❤️" : "Make today special — send a song, a photo, a memory."}</p>
+          </div>
+        )}
+        <TogetherNow />
+        <QuestionCard q={question} />
       </section>
 
       {/* ── ON THIS DAY ──────────────────────────────────────────── */}
@@ -148,12 +192,16 @@ export default async function Home() {
         ) : (
           <div className="mt-6 grid gap-5 lg:grid-cols-[1.2fr_1fr]">
             {photos.length > 0 && (
-              <div className="grid auto-rows-[9rem] grid-cols-3 gap-2 overflow-hidden rounded-[22px]">
-                {photos.map((p, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={p.id} src={`/api/photos/${p.id}`} alt={p.caption ?? "A photo from our story"} loading="lazy" className={`size-full object-cover ${i === 0 ? "col-span-2 row-span-2" : ""}`} />
+              <Link href="/gallery" className="grid auto-rows-[9rem] grid-cols-3 gap-2 overflow-hidden rounded-[22px]" aria-label="Open our gallery">
+                {photos.slice(0, 6).map((p, i) => (
+                  <span key={p.id} className={`relative block overflow-hidden ${i === 0 ? "col-span-2 row-span-2" : ""}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- signed private thumbnail */}
+                    <img src={p.thumbUrl!} alt={p.caption ?? "From our gallery"} loading="lazy" className="size-full object-cover transition duration-500 hover:scale-105" />
+                    {p.kind !== "photo" && <span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white">{p.kind === "song" ? "♪" : "▶"}</span>}
+                    {p.isNew && <span className="absolute right-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[0.6rem] font-bold text-accent-ink">NEW</span>}
+                  </span>
                 ))}
-              </div>
+              </Link>
             )}
             <ol className={`space-y-3 ${photos.length === 0 ? "lg:col-span-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0" : ""}`}>
               {recent.map(({ m, by, byTheme }) => (

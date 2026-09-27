@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireCtx } from "@/lib/context";
 import { worldFor } from "@/lib/worlds";
 import { WorldEmblem } from "@/components/world-emblem";
+import { Avatar } from "@/components/avatar";
 import { WorldTabs } from "./world-tabs";
 
 export default async function WorldLayout({ children, params }: LayoutProps<"/world/[slug]">) {
@@ -27,8 +28,14 @@ export default async function WorldLayout({ children, params }: LayoutProps<"/wo
         <div className="relative mx-auto max-w-6xl px-4 pt-10 sm:pt-14">
           <div className="flex items-center justify-between gap-6">
             <div className="max-w-2xl rise">
+              <Avatar name={person.displayName} url={person.avatarUrl} theme={person.theme} size={96} ring className="mb-5" />
               <p className="eyebrow">{own ? "Your world" : `${first}'s world`}</p>
               <h1 className="display-xl mt-3">{person.displayName}</h1>
+              {person.birthday && (
+                <p className="mt-2 text-sm text-muted">
+                  🎂 Birthday: {new Date(`${person.birthday}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" })}
+                </p>
+              )}
               <p className={`mt-4 text-lg ${person.theme === "hassan" ? "font-mono text-base" : ""}`}>
                 {[person.course, person.headline ?? person.focus].filter(Boolean).join(" · ")}
               </p>

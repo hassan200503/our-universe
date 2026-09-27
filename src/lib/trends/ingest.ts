@@ -5,6 +5,7 @@ import { trendSources, trends } from "@/lib/db/schema";
 import { fetchINat } from "./adapters/inaturalist";
 import { fetchRss } from "./adapters/rss";
 import { type AdapterResult, type NormalizedItem, SourceError } from "./adapters/types";
+import { enrichMissingImages } from "./enrich";
 import { SOURCES, type SourceDef } from "./sources";
 import { TOPICS, type TopicKey, categorize, tagsFor } from "./topics";
 
@@ -107,7 +108,15 @@ async function ingestSource(source: SourceDef): Promise<SourceRunResult> {
         .onConflictDoUpdate({
           target: trends.dedupeKey,
           // Keep the original fetch time; refresh fields the publisher may have corrected.
-          set: { title: sql`excluded.title`, summary: sql`excluded.summary`, sourceUpdatedAt: sql`excluded.source_updated_at` },
+          set: {
+            title: sql`excluded.title`,
+            summary: sql`excluded.summary`,
+            sourceUpdatedAt: sql`excluded.source_updated_at`,
+            // Never lose a picture we already found; pick up one the feed has added since.
+            imageUrl: sql`coalesce(${trends.imageUrl}, excluded.image_url)`,
+            imageCredit: sql`coalesce(${trends.imageCredit}, excluded.image_credit)`,
+            extra: sql`coalesce(excluded.extra, ${trends.extra})`,
+          },
         })
         .returning({ inserted: sql<boolean>`xmax = 0` });
       stored += inserted.filter((r) => r.inserted).length;
@@ -164,7 +173,7 @@ async function pool<T, R>(items: T[], size: number, fn: (t: T) => Promise<R>, de
   return out;
 }
 
-export type IngestSummary = { ranAt: string; attempted: number; stored: number; failed: SourceRunResult[]; results: SourceRunResult[] };
+export type IngestSummary = { ranAt: string; attempted: number; stored: number; failed: SourceRunResult[]; results: SourceRunResult[]; enriched: number };
 
 /**
  * Fetch every due source. `force` makes all sources due first (used by the
@@ -186,12 +195,16 @@ export async function runIngest(opts: { force?: boolean; topics?: string[]; budg
   const [rssResults, inatResults] = await Promise.all([pool(rss, 6, ingestSource, deadline), pool(inat, 1, ingestSource, deadline)]);
   const results = [...rssResults, ...inatResults];
 
+  // Fill in pictures for items that arrived without one (a small batch per run).
+  const enriched = await enrichMissingImages(opts.budgetMs ? 8 : 60, opts.budgetMs ? deadline + 4_000 : Infinity).catch(() => 0);
+
   return {
     ranAt: new Date().toISOString(),
     attempted: results.length,
     stored: results.reduce((n, r) => n + r.stored, 0),
     failed: results.filter((r) => !r.ok),
     results,
+    enriched,
   };
 }
 
@@ -212,7 +225,7 @@ export async function retagAll(): Promise<number> {
       continue;
     }
     const topic = r.topic as TopicKey;
-    const hint = r.contentType === "observation" ? "observation: " : "";
+    const hint = ({ observation: "observation: ", sound: "sound: ", video: "video: ", community: "community: " } as Record<string, string>)[r.contentType] ?? "";
     const text = `${r.title} ${r.summary ?? ""}`;
     await db
       .update(trends)

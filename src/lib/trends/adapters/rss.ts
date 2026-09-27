@@ -39,18 +39,39 @@ function atomLink(entry: Node): string | null {
   const links = arr(entry.link as Node | Node[]);
   const alt = links.find((l) => typeof l === "object" && (!l["@_rel"] || l["@_rel"] === "alternate")) ?? links[0];
   if (!alt) return null;
-  return typeof alt === "string" ? alt : (alt["@_href"] as string) ?? null;
+  return typeof alt === "string" ? alt : ((alt["@_href"] as string) ?? null);
 }
 
-function image(item: Node): string | null {
-  for (const key of ["media:thumbnail", "media:content", "enclosure"]) {
-    for (const m of arr(item[key] as Node | Node[])) {
-      const url = m?.["@_url"] as string | undefined;
-      const type = (m?.["@_type"] as string | undefined) ?? "";
-      const medium = (m?.["@_medium"] as string | undefined) ?? "";
-      if (url && (key !== "enclosure" || type.startsWith("image/")) && (key !== "media:content" || !medium || medium === "image")) {
-        return url;
-      }
+const IMG_EXT = /\.(jpe?g|png|webp|gif|avif)(\?|$)/i;
+
+/** An image the publisher put in the feed: media tags, enclosures, or the first <img> in the content. */
+function feedImage(item: Node, html: string | null): string | null {
+  const group = item["media:group"] as Node | undefined;
+  const candidates: Node[] = [
+    ...arr(item["media:thumbnail"] as Node | Node[]),
+    ...arr(group?.["media:thumbnail"] as Node | Node[]),
+    ...arr(item["media:content"] as Node | Node[]),
+    ...arr(group?.["media:content"] as Node | Node[]),
+    ...arr(item.enclosure as Node | Node[]),
+  ];
+  for (const m of candidates) {
+    const url = m?.["@_url"] as string | undefined;
+    if (!url) continue;
+    const type = String(m["@_type"] ?? "");
+    const medium = String(m["@_medium"] ?? "");
+    if (type.startsWith("image/") || medium === "image" || IMG_EXT.test(url) || (!type && !medium)) return url;
+  }
+  const itunes = (item["itunes:image"] as Node | undefined)?.["@_href"] as string | undefined;
+  if (itunes) return itunes;
+  if (html) {
+    // Skip tracking pixels and emoji; prefer a real content image.
+    for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) {
+      const src = decodeEntities(m[1]);
+      if (!/^https?:\/\//.test(src)) continue;
+      if (/(pixel|feedburner|emoji|gravatar|wp-includes|\.svg)/i.test(src)) continue;
+      const w = Number(m[0].match(/width=["']?(\d+)/i)?.[1] ?? 0);
+      if (w && w < 80) continue;
+      return src;
     }
   }
   return null;
@@ -83,29 +104,56 @@ export async function fetchRss(source: RssSource, state: FetchState): Promise<Ad
   const items: NormalizedItem[] = [];
   for (const it of rawItems) {
     const title = text(it.title);
-    const url = feed ? atomLink(it) : text(it.link) ?? text(it.guid);
+    const url = feed ? atomLink(it) : (text(it.link) ?? text(it.guid));
     const published = date(it.pubDate, it["dc:date"], it.published, it.updated);
     // No date means we cannot say how fresh it is, so we don't show it.
     if (!title || !url || !published) continue;
     if (now - published.getTime() > MAX_AGE_MS) continue;
+    if (source.include && !source.include.test(url)) continue;
+
+    const youtubeId = text(it["yt:videoId"]);
+    const group = it["media:group"] as Node | undefined;
+    const html = text(it["content:encoded"]) ?? text(it.content) ?? text(it.description) ?? text(it.summary);
+    const rawSummary = youtubeId ? text(group?.["media:description"]) : (text(it.description) ?? text(it.summary) ?? html);
+    const cleanTitle = stripHtml(decodeEntities(title));
+    const summary = excerpt(rawSummary);
+
+    // Sources whose topic is broader than ours must mention it (ScienceDaily "Birds" also carries dinosaurs).
+    if (source.requireKeywords && !source.requireKeywords.test(`${cleanTitle} ${summary ?? ""}`)) continue;
+
     const updated = date(it.updated, it["atom:updated"]);
-    const rawSummary = text(it.description) ?? text(it.summary) ?? text(it["content:encoded"]) ?? text(it.content);
-    const author = text(it["dc:creator"]) ?? text((it.author as Node | undefined)?.name) ?? text(it.author);
-    const categories = arr(it.category as unknown[]).map((c) => (typeof c === "object" ? ((c as Node)["@_term"] as string) ?? text(c) : text(c))).filter(Boolean);
+    const authorNode = it.author as Node | undefined;
+    const author = text(it["dc:creator"]) ?? text(authorNode?.name) ?? text(it.author);
+    const categories = arr(it.category as unknown[])
+      .map((c) => (typeof c === "object" ? (((c as Node)["@_term"] as string) ?? text(c)) : text(c)))
+      .filter(Boolean);
+
+    const image = youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : feedImage(it, html);
+    const isReddit = /reddit\.com/.test(source.url);
     items.push({
-      title: stripHtml(decodeEntities(title)),
-      summary: excerpt(rawSummary),
-      author: author ? stripHtml(author).slice(0, 120) : null,
+      title: cleanTitle,
+      summary: isReddit ? null : summary,
+      author: author ? stripHtml(author).replace(/^\/u\//, "u/").slice(0, 120) : null,
       url: url.trim(),
       // A feed can carry a future timestamp; never present something as newer than now.
       publishedAt: new Date(Math.min(published.getTime(), now)),
       sourceUpdatedAt: updated && updated.getTime() !== published.getTime() ? updated : null,
-      imageUrl: source.thumbnails ? image(it) : null,
-      imageCredit: source.thumbnails ? source.name : null,
-      imageLicense: source.thumbnails ? (source.key === "nasa-eo" ? "Public domain (NASA)" : null) : null,
-      contentType: source.topic === "philosophy" ? (source.key === "sep" ? "encyclopedia" : "essay") : source.key === "nature-biotech" ? "paper" : "article",
-      extra: null,
-      ruleHints: categories.join(" "),
+      imageUrl: image,
+      imageCredit: image ? source.name : null,
+      imageLicense: image ? (source.key === "nasa-eo" ? "Public domain (NASA)" : null) : null,
+      contentType: youtubeId
+        ? "video"
+        : isReddit
+          ? "community"
+          : source.topic === "philosophy"
+            ? source.key === "sep"
+              ? "encyclopedia"
+              : "essay"
+            : source.key === "nature-biotech"
+              ? "paper"
+              : "article",
+      extra: youtubeId ? { youtubeId, imageOrigin: "youtube" } : image ? { imageOrigin: "feed" } : null,
+      ruleHints: `${youtubeId ? "video: " : isReddit ? "community: " : ""}${categories.join(" ")}`,
     });
   }
   return { status: "ok", items, etag: res.headers.get("etag"), lastModified: res.headers.get("last-modified") };

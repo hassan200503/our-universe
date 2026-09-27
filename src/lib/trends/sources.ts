@@ -10,10 +10,10 @@ import type { TopicKey } from "./topics";
  * 5 government, 6 established tech publication, 7 industry publication,
  * 8 high-quality open-source / project source. Lower is weighted higher.
  *
- * `thumbnails` is true only where reuse is clearly permitted: public-domain
- * government imagery (NASA) or per-photo Creative Commons licences carried with
- * attribution (iNaturalist). Every other card uses the topic's own artwork
- * instead of a publisher's image.
+ * Images: we show the image a publisher puts in its own feed, or the article's
+ * preview image (the one link previews use), hotlinked through an image CDN
+ * with the source credited, never re-hosted. iNaturalist photos and sounds
+ * carry their own Creative Commons licence and credit.
  */
 
 export type RssSource = {
@@ -26,6 +26,10 @@ export type RssSource = {
   thumbnails: boolean;
   /** Minutes between fetches. */
   every: number;
+  /** Keep only items whose URL matches (e.g. Interweave's knitting section). */
+  include?: RegExp;
+  /** Keep only items mentioning the topic (for broad feeds). */
+  requireKeywords?: RegExp;
 };
 
 export type INatSource = {
@@ -39,6 +43,9 @@ export type INatSource = {
   /** iNaturalist place id: 7042 is Kenya. */
   placeId: number;
   iconicTaxa: string[];
+  /** Fetch recordings instead of photos (bird songs). */
+  sounds?: boolean;
+  perPage?: number;
 };
 
 export type SourceDef = RssSource | INatSource;
@@ -49,8 +56,13 @@ const rss = (
   url: string,
   topic: TopicKey,
   tier: number,
-  opts: { thumbnails?: boolean; every?: number } = {},
-): RssSource => ({ key, kind: "rss", name, url, topic, tier, thumbnails: opts.thumbnails ?? false, every: opts.every ?? 60 });
+  opts: { thumbnails?: boolean; every?: number; include?: RegExp; requireKeywords?: RegExp } = {},
+): RssSource => ({ key, kind: "rss", name, url, topic, tier, thumbnails: opts.thumbnails ?? true, every: opts.every ?? 60, include: opts.include, requireKeywords: opts.requireKeywords });
+
+const yt = (key: string, name: string, channelId: string, topic: TopicKey, every = 360) =>
+  rss(key, `${name} · YouTube`, `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, topic, 7, { every });
+
+const BIRD_WORDS = /\b(birds?|avian|songbirds?|raptors?|eagles?|owls?|hawks?|falcons?|parrots?|penguins?|pigeons?|flamingos?|cranes?|herons?|finch(es)?|sparrows?|crows?|ravens?|warblers?|hummingbirds?|seabirds?|waterfowl|ducks?|geese|goose|vultures?|kingfishers?|weavers?|ornitholog\w*|migrat\w*|nest(s|ing)?|feathers?|flocks?)\b/i;
 
 export const SOURCES: SourceDef[] = [
   // 💻 Software engineering
@@ -115,13 +127,63 @@ export const SOURCES: SourceDef[] = [
   },
   rss("audubon", "Audubon", "https://www.audubon.org/rss.xml", "birds", 1, { every: 180 }),
   rss("birdlife", "BirdLife International", "https://www.birdlife.org/feed/", "birds", 1, { every: 360 }),
-  rss("sd-birds", "ScienceDaily · Birds", "https://www.sciencedaily.com/rss/plants_animals/birds.xml", "birds", 4, { every: 180 }),
+  rss("sd-birds", "ScienceDaily · Birds", "https://www.sciencedaily.com/rss/plants_animals/birds.xml", "birds", 4, { every: 180, requireKeywords: BIRD_WORDS }),
+  rss("nature-kenya", "Nature Kenya", "https://naturekenya.org/feed/", "birds", 1, { every: 720 }),
+  rss("birdwatching", "BirdWatching", "https://www.birdwatchingdaily.com/feed/", "birds", 7, { every: 360 }),
+  rss("10000birds", "10,000 Birds", "https://www.10000birds.com/feed", "birds", 7, { every: 360 }),
+  rss("bto", "British Trust for Ornithology", "https://www.bto.org/rss.xml", "birds", 3, { every: 720, requireKeywords: BIRD_WORDS }),
+  yt("yt-birdlife", "BirdLife International", "UC6Bo5Wr8yPUkleeZaaRzhdg", "birds", 720),
+  {
+    key: "inat-kenya-bird-songs",
+    kind: "inaturalist",
+    name: "iNaturalist · Bird songs",
+    topic: "birds",
+    tier: 3,
+    thumbnails: true,
+    every: 180,
+    placeId: 7042,
+    iconicTaxa: ["Aves"],
+    sounds: true,
+  },
+  {
+    key: "inat-africa-bird-songs",
+    kind: "inaturalist",
+    name: "iNaturalist · Bird songs of Africa",
+    topic: "birds",
+    tier: 3,
+    thumbnails: true,
+    every: 240,
+    placeId: 97392,
+    iconicTaxa: ["Aves"],
+    sounds: true,
+  },
+  {
+    key: "inat-africa-birds",
+    kind: "inaturalist",
+    name: "iNaturalist · Birds of Africa",
+    topic: "birds",
+    tier: 3,
+    thumbnails: true,
+    every: 60,
+    placeId: 97392,
+    iconicTaxa: ["Aves"],
+  },
 
   // 🧶 Knitting
   rss("mdk", "Modern Daily Knitting", "https://www.moderndailyknitting.com/feed/", "knitting", 7, { every: 360 }),
-  rss("interweave", "Interweave", "https://www.interweave.com/feed/", "knitting", 7, { every: 360 }),
+  rss("interweave", "Interweave", "https://www.interweave.com/feed/", "knitting", 7, { every: 360, include: /\/article\/knitting\//i }),
   rss("tincan", "Tin Can Knits", "https://blog.tincanknits.com/feed/", "knitting", 7, { every: 720 }),
   rss("knitting-and", "Knitting-and.com", "https://www.knitting-and.com/feed", "knitting", 7, { every: 720 }),
+  rss("ravelry", "Ravelry Blog", "https://blog.ravelry.com/feed/", "knitting", 8, { every: 720 }),
+  rss("ysolda", "Ysolda", "https://www.ysolda.com/blogs/journal.atom", "knitting", 7, { every: 720 }),
+  rss("nimble-needles", "Nimble Needles", "https://www.nimble-needles.com/feed/", "knitting", 7, { every: 720 }),
+  rss("reddit-knitting", "r/knitting", "https://www.reddit.com/r/knitting/top/.rss?t=day", "knitting", 8, { every: 180 }),
+  yt("yt-verypink", "VeryPink Knits", "UCrRT4LwemxYrZxj-HeCkK9Q", "knitting"),
+  yt("yt-nimble", "Nimble Needles", "UCsAIlWdyXrLE1hgujwNkHGg", "knitting"),
+  yt("yt-sheepstitch", "Sheep & Stitch", "UCXK_Yw8hCF-9oeccQP9Gs2g", "knitting"),
+  yt("yt-purlsoho", "Purl Soho", "UCD4aGdwvTeu8c3E9n2RBpCg", "knitting"),
+  yt("yt-arnecarlos", "ARNE & CARLOS", "UCswHDKvVlidNa02Y_T0D1Zw", "knitting"),
+  yt("yt-roxanne", "Roxanne Richardson", "UCSPrWB2SZXVCj2-PH-36xBA", "knitting"),
 
   // 🌎 Environment
   rss("carbon-brief", "Carbon Brief", "https://www.carbonbrief.org/feed/", "environment", 7),

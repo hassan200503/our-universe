@@ -8,6 +8,8 @@ import { SOURCES } from "@/lib/trends/sources";
 import { TOPICS, TOPIC_KEYS } from "@/lib/trends/topics";
 import { changePasscode, saveFeatures, saveInterests, savePreferences, saveProfile, saveRelationship } from "@/lib/actions/personal";
 import { ActionForm, Field } from "@/components/ui/forms";
+import { AvatarPicker } from "@/components/avatar-picker";
+import { storageMode } from "@/lib/media/storage";
 import { logout } from "@/lib/actions/auth";
 import { Container, PageHeader } from "@/components/ui/page-header";
 
@@ -34,7 +36,10 @@ export default async function SettingsPage() {
         <div className="grid gap-8 lg:grid-cols-2">
           <section className="card p-5">
             <h2 className="font-display text-xl font-semibold">Profile</h2>
-            <ActionForm action={saveProfile} submit="Save profile" resetOnSuccess={false} className="mt-3 space-y-3">
+            <div className="mt-4">
+              <AvatarPicker name={me.displayName} url={me.avatarUrl} theme={me.theme} enabled={storageMode() !== "none"} />
+            </div>
+            <ActionForm action={saveProfile} submit="Save profile" resetOnSuccess={false} className="mt-5 space-y-3">
               <Field label="Name" name="displayName">
                 <input id="displayName" name="displayName" required defaultValue={me.displayName} className="field" />
               </Field>
@@ -57,6 +62,9 @@ export default async function SettingsPage() {
               </Field>
               <Field label="Motto" name="motto">
                 <input id="motto" name="motto" defaultValue={me.motto ?? ""} className="field" />
+              </Field>
+              <Field label="Birthday 🎂" name="birthday" hint="(your partner gets a countdown and a celebration on the day)">
+                <input id="birthday" name="birthday" type="date" defaultValue={me.birthday ?? ""} className="field" />
               </Field>
               <label className="flex items-start gap-2 text-sm">
                 <input type="checkbox" name="publicProfile" defaultChecked={me.publicProfile} className="mt-1" />
@@ -98,6 +106,9 @@ export default async function SettingsPage() {
                 </Field>
                 <Field label="The day it all began" name="startedOn">
                   <input id="startedOn" name="startedOn" type="date" defaultValue={ctx.relationship.startedOn ?? ""} className="field" />
+                </Field>
+                <Field label="Next time we're together ✈️" name="nextMeetOn" hint="(counts down on the home page)">
+                  <input id="nextMeetOn" name="nextMeetOn" type="date" defaultValue={ctx.relationship.nextMeetOn ?? ""} className="field" />
                 </Field>
               </ActionForm>
             </section>

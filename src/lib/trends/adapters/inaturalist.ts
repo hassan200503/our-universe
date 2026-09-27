@@ -22,6 +22,7 @@ type Obs = {
   place_guess: string | null;
   user?: { login: string; name?: string | null };
   photos: { url: string; license_code: string | null; attribution: string }[];
+  sounds?: { file_url: string; license_code: string | null; attribution: string; file_content_type?: string }[];
   taxon?: {
     id: number;
     name: string;
@@ -30,6 +31,7 @@ type Obs = {
     iconic_taxon_name?: string;
     conservation_status?: { status_name?: string; status?: string; authority?: string } | null;
     wikipedia_url?: string | null;
+    default_photo?: { medium_url: string; license_code: string | null; attribution: string } | null;
   };
 };
 
@@ -54,6 +56,11 @@ function coarsePlace(guess: string | null): string | null {
   return parts.slice(-2).join(", ") || null;
 }
 
+/** "rüppell's griffon" → "Rüppell's Griffon"; never capitalises after an apostrophe. */
+function titleCase(name: string): string {
+  return name.replace(/(^|[\s-])(\p{L})/gu, (_, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
 const LICENSE_LABEL: Record<string, string> = {
   cc0: "CC0",
   "cc-by": "CC BY 4.0",
@@ -67,15 +74,14 @@ export async function fetchINat(source: INatSource): Promise<AdapterResult> {
     place_id: String(source.placeId),
     iconic_taxa: source.iconicTaxa.join(","),
     quality_grade: "research",
-    photos: "true",
-    photo_license: LICENSES,
+    ...(source.sounds ? { sounds: "true", sound_license: LICENSES } : { photos: "true", photo_license: LICENSES }),
     order_by: "created_at",
     order: "desc",
-    per_page: "40",
+    per_page: String(source.perPage ?? 40),
     locale: "en",
   });
   const data = await getJson<{ results: Obs[] }>(`${API}/observations?${qs}`);
-  const obs = data.results.filter((o) => o.taxon && o.photos[0] && o.taxon.rank === "species");
+  const obs = data.results.filter((o) => o.taxon && o.taxon.rank === "species" && (source.sounds ? o.sounds?.[0] : o.photos[0]));
 
   const taxonIds = [...new Set(obs.map((o) => o.taxon!.id))].slice(0, 30);
   const facts = new Map<number, string>();
@@ -95,8 +101,13 @@ export async function fetchINat(source: INatSource): Promise<AdapterResult> {
     const t = o.taxon!;
     if (seen.has(t.id)) continue;
     seen.add(t.id);
-    const photo = o.photos[0];
-    const common = t.preferred_common_name ? t.preferred_common_name.replace(/\b\w/g, (c) => c.toUpperCase()) : t.name;
+    // A sighting's own photo when licensed for reuse; otherwise the species' default photo, also CC-licensed.
+    const own = o.photos.find((p) => p.license_code);
+    const fallback = t.default_photo?.license_code ? t.default_photo : null;
+    const photo = own ? { url: own.url, license_code: own.license_code, attribution: own.attribution } : fallback ? { url: fallback.medium_url, license_code: fallback.license_code, attribution: fallback.attribution } : null;
+    const sound = source.sounds ? o.sounds?.find((x) => x.license_code) : undefined;
+    if (source.sounds && !sound) continue;
+    const common = titleCase(t.preferred_common_name ?? t.name);
     const fact = excerpt(facts.get(t.id), 320);
     const status = t.conservation_status?.status_name ?? null;
     const place = coarsePlace(o.place_guess);
@@ -107,10 +118,10 @@ export async function fetchINat(source: INatSource): Promise<AdapterResult> {
       url: o.uri,
       publishedAt: new Date(o.created_at),
       sourceUpdatedAt: new Date(o.updated_at),
-      imageUrl: photo.url.replace("/square.", "/medium."),
-      imageCredit: photo.attribution,
-      imageLicense: photo.license_code ? LICENSE_LABEL[photo.license_code] ?? photo.license_code.toUpperCase() : null,
-      contentType: "observation",
+      imageUrl: photo ? photo.url.replace("/square.", "/medium.") : null,
+      imageCredit: photo?.attribution ?? null,
+      imageLicense: photo?.license_code ? (LICENSE_LABEL[photo.license_code] ?? photo.license_code.toUpperCase()) : null,
+      contentType: sound ? "sound" : "observation",
       extra: {
         commonName: common,
         scientificName: t.name,
@@ -123,8 +134,12 @@ export async function fetchINat(source: INatSource): Promise<AdapterResult> {
         factUrl: t.wikipedia_url ?? undefined,
         observer: o.user?.login,
         iconicTaxon: t.iconic_taxon_name,
+        imageOrigin: photo ? "licensed" : undefined,
+        ...(sound
+          ? { audioUrl: sound.file_url, audioCredit: sound.attribution, audioLicense: sound.license_code ? (LICENSE_LABEL[sound.license_code] ?? sound.license_code.toUpperCase()) : undefined }
+          : {}),
       },
-      ruleHints: `observation: ${t.iconic_taxon_name ?? ""}`,
+      ruleHints: `${sound ? "sound" : "observation"}: ${t.iconic_taxon_name ?? ""}`,
     });
   }
   return { status: "ok", items, etag: null, lastModified: null };
