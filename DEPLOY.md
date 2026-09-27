@@ -8,6 +8,7 @@ Hosting: **Neon** (Postgres), **Vercel Hobby** (the website — free, no card, p
 2. **Add New → Project →** import `hassan200503/our-universe` (allow Vercel access to that repository).
 3. Add one environment variable, `DATABASE_URL` (the Neon pooled string). Session cookies are signed with a key derived from it, so nothing else is required.
 4. Deploy. Every push to `main` redeploys automatically.
+5. For gallery uploads (photos, videos, songs, profile pictures): **Storage → Create Database → Blob**, keep **Private** access, then **Connect Project** with Production ticked so `BLOB_READ_WRITE_TOKEN` is added. Redeploy afterwards. Without it the site works but refuses uploads with a clear message.
 
 > Free-tier limits change. Before relying on them, re-check each provider's current pricing page: Neon's free plan, Netlify's free plan (function timeouts, build minutes), and GitHub Actions minutes for **private** repositories.
 
