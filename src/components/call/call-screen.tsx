@@ -211,6 +211,7 @@ export function CallScreen() {
         <p className={`mt-2 text-sm tabular-nums ${snap.phase === "reconnecting" ? "text-amber-300" : snap.phase === "ended" ? "text-white/80" : "text-white/70"}`} aria-live="polite">
           {status}
         </p>
+        {snap.phase === "connecting" && snap.route && <p className="mt-3 max-w-xs text-center text-[0.68rem] leading-snug text-white/50">{snap.route}</p>}
         {!snap.remoteMicOn && snap.phase === "connected" && <p className="mt-2 rounded-full bg-black/40 px-3 py-1 text-xs text-white/80">{first} is muted</p>}
         {snap.notice && (
           <button type="button" onClick={() => engine.clearNotice()} className="mt-4 max-w-sm rounded-2xl bg-black/50 px-4 py-2.5 text-sm text-white/90 backdrop-blur">
