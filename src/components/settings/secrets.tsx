@@ -92,26 +92,34 @@ export function AiKeySetting({ status }: { status: Status }) {
 
 type Provider = "metered" | "cloudflare" | "custom";
 
-/** Opens a connection that may only use the relay, and waits for a relay candidate: proof it works from here. */
-async function testRelayHere(): Promise<string> {
+/**
+ * Gathers this device's connection routes the way a call does: a public address (direct calls
+ * can work) and a relay route (calls connect even on strict mobile networks).
+ */
+async function testCallsHere(): Promise<string> {
   const res = await fetch("/api/call/ice", { cache: "no-store" });
-  const { iceServers, relay } = (await res.json()) as { iceServers: RTCIceServer[]; relay: boolean };
-  if (!relay) return "No relay is set up yet.";
-  const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: "relay" });
+  const { iceServers, source } = (await res.json()) as { iceServers: RTCIceServer[]; source: "own" | "public" | "none" };
+  const pc = new RTCPeerConnection({ iceServers });
+  const found = new Set<string>();
   try {
     pc.createDataChannel("test");
-    const found = new Promise<boolean>((resolve) => {
+    await new Promise<void>((resolve) => {
       pc.onicecandidate = (e) => {
-        if (e.candidate?.candidate.includes(" relay ")) resolve(true);
-        if (!e.candidate) resolve(false);
+        if (e.candidate?.type) found.add(e.candidate.type);
+        if (!e.candidate || found.has("relay")) resolve();
       };
-      setTimeout(() => resolve(false), 9000);
+      setTimeout(resolve, 9000);
     });
     await pc.setLocalDescription(await pc.createOffer());
-    return (await found) ? "Relay works from this device ✓ Calls will connect even on strict mobile networks." : "The relay didn't answer from this network. Check the credentials, or try again on another network.";
   } finally {
     pc.close();
   }
+  if (found.has("relay"))
+    return source === "own"
+      ? "✓ Calls will connect from this device, even on strict mobile networks (through your relay)."
+      : "✓ Calls will connect from this device through the free public relay. It's shared and can be busy, so your own free relay is more reliable.";
+  if (found.has("srflx")) return "Direct calls work from here, but no relay answered, so calls between two strict mobile networks may not connect. Add your own relay below.";
+  return "This network blocks call connections. Try Wi-Fi, or add a relay below.";
 }
 
 /** Settings → Call relay: TURN credentials so calls connect on any network. */
@@ -127,7 +135,7 @@ export function RelaySetting({ status }: { status: Status }) {
   ];
   return (
     <div className="mt-3 space-y-4">
-      <StatusLine status={status} on="Relay is on." off="No relay yet. Calls connect directly, which works on most networks but not all mobile ones." />
+      <StatusLine status={status} on="Your relay is on." off="No relay of your own yet: calls try direct routes, then Metered's free public relay, which is shared and can be busy. Your own free relay makes calls reliable." />
       {status.source !== "env" && (
         <form ref={form} action={saveFallback} onSubmit={onSave} className="space-y-3">
           <input type="hidden" name="provider" value={provider} />
@@ -174,11 +182,9 @@ export function RelaySetting({ status }: { status: Status }) {
       )}
       <div className="flex flex-wrap items-center gap-3">
         <Result state={msg} />
-        {status.source !== "none" && (
-          <button type="button" className="btn btn-ghost text-sm" disabled={testing} onClick={() => startTest(async () => setTest(await testRelayHere().catch(() => "Couldn't run the test here.")))}>
-            {testing ? "Testing…" : "Test from this device"}
-          </button>
-        )}
+        <button type="button" className="btn btn-ghost text-sm" disabled={testing} onClick={() => startTest(async () => setTest(await testCallsHere().catch(() => "Couldn't run the test here.")))}>
+          {testing ? "Testing…" : "Test from this device"}
+        </button>
         {status.source === "saved" && (
           <form action={clearFallback} onSubmit={onClear}>
             <button className="text-xs text-muted underline-offset-4 hover:text-red-600 hover:underline" disabled={pending}>

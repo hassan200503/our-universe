@@ -7,6 +7,7 @@ import type { PulseResponse } from "@/app/api/pulse/route";
 import { Avatar } from "./avatar";
 import { IconX } from "./icons";
 import { useMembers } from "./me-context";
+import { roomLive } from "@/lib/ui/room-live";
 import { buzz } from "@/lib/ui/buzz";
 
 type PulseState = { data: PulseResponse | null; refresh: () => void };
@@ -126,9 +127,11 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
             const json = (await res.json()) as PulseResponse;
             last = json;
             const fresh: Toast[] = [];
-            if (after.current !== null && json.events.length) {
-              fresh.push(...json.events.map((e) => ({ id: `e${e.id}`, slug: e.slug, kind: e.kind, body: e.body })));
-              if (json.events.some((e) => e.kind === "nudge")) setBurst((b) => b + 1);
+            // "Started playing …" is news only if you aren't already listening together on this device.
+            const events = json.events.filter((e) => !(e.kind === "system" && roomLive.current));
+            if (after.current !== null && events.length) {
+              fresh.push(...events.map((e) => ({ id: `e${e.id}`, slug: e.slug, kind: e.kind, body: e.body })));
+              if (events.some((e) => e.kind === "nudge")) setBurst((b) => b + 1);
               buzz(80);
             }
             const latest = json.chat?.latest;

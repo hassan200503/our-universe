@@ -12,6 +12,20 @@ const usable = (list: Ice[]) =>
     .map((s) => ({ ...s, urls: (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u) => !/:53(\?|$)/.test(u)) }))
     .filter((s) => s.urls.length > 0);
 
+/**
+ * With no relay of your own, calls fall back to Metered's free public relay
+ * ("Open Relay"). It's shared and best-effort, so your own free relay in
+ * Settings → Call relay is more reliable. TURN_PUBLIC_FALLBACK=off turns it off.
+ */
+const PUBLIC_RELAY: Ice[] = [
+  {
+    urls: ["turn:staticauth.openrelay.metered.ca:80", "turn:staticauth.openrelay.metered.ca:443", "turns:staticauth.openrelay.metered.ca:443?transport=tcp"],
+    username: "openrelayproject",
+    credential: "openrelayprojectsecret",
+  },
+];
+const publicFallback = () => process.env.TURN_PUBLIC_FALLBACK !== "off";
+
 const isTurn = (s: Ice) => (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u) => /^turns?:/.test(u));
 
 /**
@@ -54,7 +68,7 @@ export async function fetchRelay(c: RelayConfig): Promise<Ice[]> {
 const g = globalThis as unknown as { __ice?: { key: string; at: number; servers: Ice[] } };
 
 /** ICE servers for a new call: STUN always, plus a relay when one is configured. Cached for an hour per configuration. */
-export async function iceServers(): Promise<{ iceServers: Ice[]; relay: boolean }> {
+export async function iceServers(): Promise<{ iceServers: Ice[]; relay: boolean; source: "own" | "public" | "none" }> {
   const config = fromEnv() ?? (await readSecret<RelayConfig>(SECRET_RELAY));
   const key = createHash("sha256").update(JSON.stringify(config ?? null)).digest("hex");
   const cached = g.__ice;
@@ -72,7 +86,10 @@ export async function iceServers(): Promise<{ iceServers: Ice[]; relay: boolean 
     g.__ice = { key, at: ok ? Date.now() : Date.now() - 3300_000, servers: usable([...STUN, ...turn]) };
   }
   const servers = g.__ice!.servers;
-  return { iceServers: servers, relay: servers.some(isTurn) };
+  if (servers.some(isTurn)) return { iceServers: servers, relay: true, source: "own" };
+  // No relay of our own (none set, or the provider is down right now): the public one is better than none.
+  if (publicFallback()) return { iceServers: [...servers, ...PUBLIC_RELAY], relay: true, source: "public" };
+  return { iceServers: servers, relay: false, source: "none" };
 }
 
 export function relaySource(): "env" | null {

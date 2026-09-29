@@ -76,9 +76,9 @@ async function iceServers(): Promise<Ice> {
   if (iceCache && Date.now() - iceCache.at < 30 * 60_000) return iceCache.servers;
   try {
     const res = await fetch("/api/call/ice", { cache: "no-store" });
-    const { iceServers: servers, relay } = (await res.json()) as { iceServers: Ice; relay?: boolean };
-    // Relay credentials are worth reusing; without a relay, ask again next time so one saved in Settings is used at once.
-    iceCache = relay ? { at: Date.now(), servers } : null;
+    const { iceServers: servers, source } = (await res.json()) as { iceServers: Ice; source?: string };
+    // Your own relay's credentials are worth reusing; otherwise ask again next time, so one saved in Settings is used at once.
+    iceCache = source === "own" ? { at: Date.now(), servers } : null;
     return servers;
   } catch {
     return [{ urls: "stun:stun.l.google.com:19302" }];
@@ -114,6 +114,9 @@ export class CallEngine {
   private dc: RTCDataChannel | null = null;
   private audioEl: HTMLAudioElement | null = null;
   private pendingIce: RTCIceCandidateInit[] = [];
+  /** Candidate types seen on each side (host, srflx, relay), to explain a call that can't connect. */
+  private candTypes = { mine: new Set<string>(), theirs: new Set<string>() };
+  private hasRelay = false;
   private outgoingIce: RTCIceCandidateInit[] = [];
   private iceFlush: ReturnType<typeof setTimeout> | null = null;
   private bufferedOffer: string | null = null;
@@ -434,6 +437,8 @@ export class CallEngine {
    */
   private async createPeer(local: MediaStream, caller: boolean) {
     const servers = await iceServers();
+    this.hasRelay = servers.some((x) => (Array.isArray(x.urls) ? x.urls : [x.urls]).some((u) => /^turns?:/.test(u)));
+    this.candTypes = { mine: new Set(), theirs: new Set() };
     const pc = new RTCPeerConnection({ iceServers: servers, bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
     this.pc = pc;
     const remote = new MediaStream();
@@ -459,6 +464,7 @@ export class CallEngine {
     };
     pc.onicecandidate = (e) => {
       if (!e.candidate) return;
+      if (e.candidate.type) this.candTypes.mine.add(e.candidate.type);
       this.outgoingIce.push(e.candidate.toJSON());
       this.iceFlush ??= setTimeout(() => this.flushIce(), 120);
     };
@@ -513,6 +519,8 @@ export class CallEngine {
       await this.drainIce();
     } else if (sig.kind === "ice") {
       const c = JSON.parse(sig.payload) as RTCIceCandidateInit;
+      const type = / typ (\w+)/.exec(c.candidate ?? "")?.[1];
+      if (type) this.candTypes.theirs.add(type);
       if (pc?.remoteDescription) await pc.addIceCandidate(c).catch(() => {});
       else this.pendingIce.push(c);
     } else if (sig.kind === "restart") {
@@ -568,10 +576,16 @@ export class CallEngine {
     const st = pc.iceConnectionState;
     if (!this.s.connectedAt) {
       // Never connected yet: retry the path search a couple of times before the deadline gives up.
-      if ((st === "failed" || pc.connectionState === "failed") && this.earlyRestarts < 2) {
-        this.earlyRestarts++;
-        if (this.s.call?.role === "caller") pc.restartIce();
-        else this.sendSignals([{ kind: "restart", payload: "{}" }]);
+      if (st === "failed" || pc.connectionState === "failed") {
+        if (this.earlyRestarts < 2) {
+          this.earlyRestarts++;
+          if (this.s.call?.role === "caller") pc.restartIce();
+          else this.sendSignals([{ kind: "restart", payload: "{}" }]);
+        } else if (this.s.call && this.s.phase === "connecting") {
+          // Every path was tried three times: say why now rather than at the deadline.
+          void api({ action: "failed", id: this.s.call.id });
+          this.finish(this.whyNot());
+        }
       }
       return;
     }
@@ -594,11 +608,20 @@ export class CallEngine {
     if (!this.restartTimer) this.restartTimer = setTimeout(restart, st === "failed" ? 200 : 2500);
   }
 
+  /** A plain explanation of a call that couldn't connect, from what each side managed to offer. */
+  private whyNot(): string {
+    const { mine, theirs } = this.candTypes;
+    if (!this.hasRelay) return "Couldn't connect: your networks block direct calls (common on mobile data). Add a free relay in Settings → Call relay, then call again.";
+    if (!mine.has("relay")) return "Couldn't connect: this network blocked the call relay too. Try Wi-Fi, or check Settings → Call relay → Test from this device.";
+    if (!theirs.has("relay")) return "Couldn't connect: your partner's network blocked the call. Ask them to try Wi-Fi.";
+    return "Couldn't connect the call. Try again, or switch one phone to Wi-Fi.";
+  }
+
   private connectDeadline() {
     this.later(() => {
       if (this.s.phase === "connecting" && this.s.call) {
         void api({ action: "failed", id: this.s.call.id });
-        this.finish(this.s.relayed ? "Couldn't connect the call." : "Couldn't connect. One of your networks may be blocking calls — try Wi-Fi.");
+        this.finish(this.whyNot());
       }
     }, CONNECT_TIMEOUT);
   }

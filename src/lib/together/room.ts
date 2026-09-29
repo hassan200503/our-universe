@@ -32,14 +32,19 @@ async function ensureRow(ctx: Ctx) {
   return row;
 }
 
-/** Everything a client needs to steer its player; the full state only when it changed. */
-export async function readRoom(ctx: Ctx, knownVersion: number | null, afterEvent: number | null): Promise<RoomPayload> {
+/**
+ * Everything a client needs to steer its player; the full state only when it changed.
+ * `inRoom` is false when the room is only playing in the background on another page:
+ * then this read doesn't claim you're in the room (the pulse keeps your real place).
+ */
+export async function readRoom(ctx: Ctx, knownVersion: number | null, afterEvent: number | null, inRoom = true): Promise<RoomPayload> {
   const db = await getDb();
   const now = new Date();
-  await db
-    .insert(presence)
-    .values({ personId: ctx.me.id, lastSeenAt: now, place: "room" })
-    .onConflictDoUpdate({ target: presence.personId, set: { lastSeenAt: now, place: "room" } });
+  if (inRoom)
+    await db
+      .insert(presence)
+      .values({ personId: ctx.me.id, lastSeenAt: now, place: "room" })
+      .onConflictDoUpdate({ target: presence.personId, set: { lastSeenAt: now, place: "room" } });
 
   const row = await ensureRow(ctx);
   const partnerIds = ctx.partners.map((p) => p.id);
@@ -63,7 +68,7 @@ export async function readRoom(ctx: Ctx, knownVersion: number | null, afterEvent
 
   const slug = (id: string | null) => ctx.members.find((m) => m.id === id)?.slug ?? "";
   const payload: RoomPayload = {
-    serverNow: now.toISOString(),
+    serverNow: "",
     version: row.version,
     events: events.map((e) => ({ id: e.id, kind: e.kind, body: e.body, slug: slug(e.personId), createdAt: e.createdAt.toISOString() })),
     partners: ctx.partners.map((p) => {
@@ -86,16 +91,21 @@ export async function readRoom(ctx: Ctx, knownVersion: number | null, afterEvent
       queue: row.queue.map((id) => cards.find((c) => c.id === id)).filter((c): c is MediaCard => !!c),
     };
   }
+  // Stamped as the reply leaves, so a phone can estimate the server's clock from the round trip.
+  payload.serverNow = new Date().toISOString();
   return payload;
 }
 
 export const action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("load"), mediaId: z.uuid().optional(), youtubeId: z.string().regex(/^[\w-]{11}$/).optional(), title: z.string().max(200).optional(), play: z.boolean().default(true) }),
-  z.object({ type: z.literal("play"), position: z.number().min(0).max(86400) }),
-  z.object({ type: z.literal("pause"), position: z.number().min(0).max(86400) }),
-  z.object({ type: z.literal("seek"), position: z.number().min(0).max(86400) }),
+  // `at`: the moment (server clock, as the phone estimates it) the position was read, so the
+  // time the request spent travelling doesn't put the other phone behind.
+  z.object({ type: z.literal("play"), position: z.number().min(0).max(86400), at: z.number().optional() }),
+  z.object({ type: z.literal("pause"), position: z.number().min(0).max(86400), at: z.number().optional() }),
+  z.object({ type: z.literal("seek"), position: z.number().min(0).max(86400), at: z.number().optional() }),
   z.object({ type: z.literal("next") }),
-  z.object({ type: z.literal("ended"), key: z.string().max(64) }),
+  // `version`: the state the phone judged finished; a newer state (the same track started again) isn't.
+  z.object({ type: z.literal("ended"), key: z.string().max(64), version: z.number().int().optional() }),
   z.object({ type: z.literal("queue"), mediaId: z.uuid() }),
   z.object({ type: z.literal("dequeue"), mediaId: z.uuid() }),
   z.object({ type: z.literal("chat"), body: z.string().min(1).max(500) }),
@@ -131,12 +141,15 @@ export async function applyRoom(ctx: Ctx, a: RoomAction): Promise<void> {
       return;
     case "play":
     case "pause":
-    case "seek":
+    case "seek": {
+      const now = Date.now();
+      const at = a.at !== undefined && Math.abs(now - a.at) < 5000 ? new Date(a.at) : new Date(now);
       await db
         .update(roomState)
-        .set({ ...bump, position: a.position, ...(a.type === "seek" ? {} : { playing: a.type === "play" }) })
+        .set({ ...bump, updatedAt: at, position: a.position, ...(a.type === "seek" ? {} : { playing: a.type === "play" }) })
         .where(eq(roomState.relationshipId, rel));
       return;
+    }
     case "load": {
       if (a.mediaId) {
         const [card] = await mediaByIds(ctx, [a.mediaId]);
@@ -160,7 +173,7 @@ export async function applyRoom(ctx: Ctx, a: RoomAction): Promise<void> {
     case "ended": {
       // "ended" names the track that finished, so two phones finishing together advance only once.
       const currentKey = row.mediaId ?? row.youtubeId ?? "";
-      if (a.type === "ended" && a.key !== currentKey) return;
+      if (a.type === "ended" && (a.key !== currentKey || (a.version !== undefined && a.version !== row.version))) return;
       const [nextId, ...rest] = row.queue;
       await db
         .update(roomState)

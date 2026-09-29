@@ -23,7 +23,7 @@ Hassan's world, Whitney's world, and the story they're writing together, plus li
 | Home: the night stage with a journey verse that changes on every visit, a live journey clock, the road ahead, a moment from your journey | `/` |
 | Messages: typing indicator, sent / delivered / read ticks, swipe or hold to reply, reactions, edit, delete for me or for everyone | `/together/chat` |
 | Voice and video calls, from Messages, the partner menu in the header, or the home page | anywhere |
-| Together room: listen and watch in sync, with the chat beside you | `/together` |
+| Together room: listen and watch in sync, with the chat beside you; it keeps playing (as a mini-player) through Messages, calls and the rest of the site | `/together` |
 | Our Story: memories, milestones, adventures, plans, saved discoveries | `/story` |
 | Each person's world: profile, dashboard, journal, radar, skills, Knowledge Vault | `/world/[slug]` |
 | Hassan only: Things I'm Building, Questions I'm Thinking About | `/world/hassan/projects`, `/world/hassan/thinking` |
@@ -59,6 +59,11 @@ Everything personal has a visibility: 🔒 **private** (owner only), 💞 **shar
 - **Threads** keep the conversation, so follow-ups have context. Share a thread and it appears in your partner's Research too; they can read it and ask follow-ups. **Quiz me** writes five multiple-choice questions on what a thread covered. **Save to learning** keeps an answer in Things We Are Learning.
 - **Gemini** (`src/lib/research/gemini.ts`) tries each model in `GEMINI_MODELS` until one answers, first with Google Search grounding, then without; a model that says "busy" waits at the back of the queue for a minute. When grounding is used, Google's search suggestions are shown with the answer, as Google requires.
 - **Keys** come from `GEMINI_API_KEY`, or from Settings → AI research, where the key is checked with Google and stored sealed (AES-256-GCM) in the `kv` table (`src/lib/settings.ts`). The call relay in Settings → Call relay is stored the same way. Neither ever reaches the browser.
+
+## Listening together
+
+- **One player for the whole site.** The room's player lives in the root layout (`src/components/together/room-provider.tsx`), so opening Messages, taking a call or visiting any page never stops the music: outside the room it becomes a mini-player (play/pause for both, back to the room, stop on this device). During a call the music drops to 20% volume.
+- **Staying in step.** The server keeps `{playing, position, updatedAt}`; play/pause/seek carry the moment they happened, so request travel time doesn't put anyone behind. Each phone estimates the server clock from its fastest recent round trips, never lets an older reply undo a newer state, and closes gaps by playing up to 5–10% faster or slower. It jumps only for large gaps, never while buffering, only into audio already downloaded (unless far behind), and backs off on slow connections. "Ended" names the state version it judged, so a stale report can't stop a track that was just restarted.
 
 ## The Live Trends Engine
 

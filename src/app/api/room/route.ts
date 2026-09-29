@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
   const p = req.nextUrl.searchParams;
-  const payload = await readRoom(ctx, num(p.get("v")), num(p.get("after")));
+  const payload = await readRoom(ctx, num(p.get("v")), num(p.get("after")), p.get("away") !== "1");
   return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -20,6 +20,6 @@ export async function POST(req: NextRequest) {
   const parsed = action.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   await applyRoom(ctx, parsed.data);
-  const payload = await readRoom(ctx, null, num(req.nextUrl.searchParams.get("after")));
+  const payload = await readRoom(ctx, null, num(req.nextUrl.searchParams.get("after")), req.nextUrl.searchParams.get("away") !== "1");
   return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
 }
