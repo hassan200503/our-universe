@@ -8,10 +8,42 @@ import type { MediaCard } from "@/lib/media/queries";
 import { Avatar } from "@/components/avatar";
 import { useMe, useMembers } from "@/components/me-context";
 import { ago, day } from "@/lib/ui/time";
+import { IconHeadphones } from "@/components/icons";
 
 const EMOJI = ["❤️", "😍", "🥹", "😂", "🔥", "😮"];
 
 type Comment = { id: string; body: string; createdAt: string; slug: string; name: string; mine: boolean };
+
+/**
+ * A playing file keeps the link it started with: the gallery refreshes every
+ * 30 s and re-signs links, which would otherwise restart the video. Only if
+ * that link expires does it switch, picking up at the same second.
+ */
+function StableMedia({ kind, src, poster }: { kind: "video" | "song"; src: string; poster?: string | null }) {
+  const [active, setActive] = useState(src);
+  const resume = useRef<number | null>(null);
+  const common = {
+    src: active,
+    controls: true,
+    autoPlay: true,
+    playsInline: true,
+    preload: (kind === "song" ? "auto" : "metadata") as "auto" | "metadata",
+    onError: (e: React.SyntheticEvent<HTMLMediaElement>) => {
+      if (src === active) return;
+      resume.current = e.currentTarget.currentTime;
+      setActive(src);
+    },
+    onLoadedMetadata: (e: React.SyntheticEvent<HTMLMediaElement>) => {
+      if (resume.current !== null) e.currentTarget.currentTime = resume.current;
+      resume.current = null;
+    },
+  };
+  return kind === "video" ? (
+    <video {...common} poster={poster ?? undefined} className="max-h-[70dvh] max-w-full rounded-2xl bg-black shadow-2xl" />
+  ) : (
+    <audio {...common} className="mt-6 w-full" />
+  );
+}
 
 function Stage({ item }: { item: MediaCard }) {
   if (item.youtubeId) {
@@ -29,7 +61,7 @@ function Stage({ item }: { item: MediaCard }) {
     );
   }
   if (item.kind === "video" && item.url) {
-    return <video key={item.id} src={item.url} poster={item.thumbUrl ?? undefined} controls autoPlay playsInline preload="metadata" className="max-h-[70dvh] max-w-full rounded-2xl bg-black shadow-2xl" />;
+    return <StableMedia key={item.id} kind="video" src={item.url} poster={item.thumbUrl} />;
   }
   if (item.kind === "song" && item.url) {
     return (
@@ -39,7 +71,7 @@ function Stage({ item }: { item: MediaCard }) {
         </p>
         <p className="font-display mt-4 text-2xl font-semibold">{item.title ?? "A song"}</p>
         {item.artist && <p className="opacity-80">{item.artist}</p>}
-        <audio key={item.id} src={item.url} controls autoPlay preload="metadata" className="mt-6 w-full" />
+        <StableMedia key={item.id} kind="song" src={item.url} />
       </div>
     );
   }
@@ -179,7 +211,7 @@ export function Viewer({ items, index, onIndex, onClose, onChanged }: { items: M
         <div className="mt-4 flex flex-wrap gap-2">
           {item.kind !== "photo" && (
             <button data-world="us" onClick={playTogether} className="btn">
-              🎧 Play together
+              <IconHeadphones size={16} /> Play together
             </button>
           )}
           {item.kind === "photo" && (

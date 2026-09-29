@@ -6,22 +6,33 @@
  *   world-whitney — sage, lavender & cream: biology, birds, craft
  *   world-us      — red-flower rose & warm gold: memories, love, growing together
  * Pages set `data-world` on a wrapper; components read the --accent tokens.
+ *
+ * The base is ivory and ink by day, midnight by night, with champagne gold as
+ * the one metallic that ties everything together.
  */
 
 :root {
-  --bg: #faf8f5;
-  --surface: #ffffff;
-  --surface-2: #f3f0ea;
-  --ink: #1c1917;
-  --muted: #6b645c;
-  --line: #e7e1d8;
+  --bg: #f7f3ec;
+  --surface: #fffdf9;
+  --surface-2: #f1ebe1;
+  --ink: #17130f;
+  --muted: #6c645a;
+  --line: #e5ddd0;
   --focus: #2563eb;
+
+  --gold: #a07b43;
+  --gold-2: #d7b77c;
+  --gold-soft: #f4ead6;
+  --night: #09070d;
+  --pearl: #f6efe4;
 
   --accent: #c81e3a;
   --accent-ink: #ffffff;
   --accent-soft: #fde8ec;
   --accent-2: #b7791f;
   --glow: rgba(200, 30, 58, 0.18);
+
+  --ease-lux: cubic-bezier(0.22, 0.8, 0.16, 1);
 }
 
 [data-world="hassan"] {
@@ -45,13 +56,16 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f0e14;
-    --surface: #17161f;
-    --surface-2: #1f1d29;
-    --ink: #eeeaf2;
-    --muted: #a39cae;
-    --line: #2d2a3a;
+    --bg: #0b0a0e;
+    --surface: #141218;
+    --surface-2: #1c1a21;
+    --ink: #f2ede5;
+    --muted: #a59e9f;
+    --line: #2b2831;
     --focus: #93c5fd;
+    --gold: #d6b67c;
+    --gold-2: #f0dcae;
+    --gold-soft: #2a2319;
     --accent: #f0556d;
     --accent-ink: #14060a;
     --accent-soft: #3a1620;
@@ -85,264 +99,678 @@
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
   --color-accent-2: var(--accent-2);
+  --color-gold: var(--gold);
+  --color-gold-2: var(--gold-2);
+  --color-gold-soft: var(--gold-soft);
+  --color-night: var(--night);
+  --color-pearl: var(--pearl);
   --font-sans: var(--font-inter);
   --font-display: var(--font-fraunces);
+  --font-lux: var(--font-cormorant);
   --font-mono: var(--font-jetbrains);
 }
 
-html {
-  color-scheme: light dark;
-}
-
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-inter), system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-.font-display {
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-optical-sizing: auto;
-}
-
-/* Cards in long feeds skip layout and paint until they near the viewport. */
-.feed-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 360px;
-}
-
-.field {
-  width: 100%;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  border-radius: 10px;
-  padding: 0.55rem 0.75rem;
-  font-size: 0.95rem;
-}
-.field:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 0;
-  border-color: transparent;
-}
-textarea.field {
-  min-height: 6rem;
-  resize: vertical;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border-radius: 999px;
-  padding: 0.5rem 1rem;
-  font-weight: 600;
-  font-size: 0.9rem;
-  background: var(--accent);
-  color: var(--accent-ink);
-  transition: transform 0.12s ease, filter 0.12s ease;
-}
-.btn:hover {
-  filter: brightness(1.06);
-}
-.btn:active {
-  transform: translateY(1px);
-}
-.btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.btn-ghost {
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--line);
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  border-radius: 999px;
-  padding: 0.2rem 0.65rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: var(--accent-soft);
-  color: var(--accent);
-  white-space: nowrap;
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-}
-
-.eyebrow {
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-/* Hassan's world gets a faint engineering grid. */
-.bg-hassan {
-  background-image:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 28px 28px;
-  background-position: -1px -1px;
-}
-/* Whitney's world gets soft, organic light. */
-.bg-whitney {
-  background:
-    radial-gradient(60% 80% at 10% 10%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 70%),
-    radial-gradient(50% 70% at 90% 30%, color-mix(in oklab, var(--accent-2) 16%, transparent), transparent 70%);
-}
-/* Our story: petals of warm light. */
-.bg-us {
-  background:
-    radial-gradient(45% 60% at 50% 0%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 70%),
-    radial-gradient(35% 45% at 85% 70%, color-mix(in oklab, var(--accent-2) 14%, transparent), transparent 70%);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .rise {
-    animation: rise 0.5s ease both;
+@layer base {
+  html {
+    color-scheme: light dark;
   }
-  @keyframes rise {
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-inter), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--gold-2) 45%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/*
+ * Component classes live in the components layer so Tailwind utilities on the
+ * same element (padding, position, radius…) always win, as they should.
+ */
+@layer components {
+  .font-display {
+    font-family: var(--font-fraunces), Georgia, serif;
+    font-optical-sizing: auto;
+  }
+  .font-lux {
+    font-family: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+    font-feature-settings:
+      "liga",
+      "dlig",
+      "onum" 0;
+  }
+
+  /* Cards in long feeds skip layout and paint until they near the viewport. */
+  .feed-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 360px;
+  }
+
+  .field {
+    width: 100%;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 12px;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.95rem;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .field:focus {
+    outline: none;
+    border-color: color-mix(in oklab, var(--accent) 60%, var(--line));
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 14%, transparent);
+  }
+  textarea.field {
+    min-height: 6rem;
+    resize: vertical;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 999px;
+    padding: 0.55rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.005em;
+    background: var(--accent);
+    color: var(--accent-ink);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.18) inset,
+      0 6px 18px -8px var(--glow);
+    transition:
+      transform 0.15s ease,
+      filter 0.15s ease,
+      box-shadow 0.2s ease;
+  }
+  .btn:hover {
+    filter: brightness(1.06);
+  }
+  .btn:active {
+    transform: translateY(1px) scale(0.99);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    box-shadow: none;
+  }
+  .btn-ghost:hover {
+    background: var(--surface-2);
+    filter: none;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    padding: 0.22rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--accent-soft);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    box-shadow:
+      0 1px 0 color-mix(in oklab, var(--ink) 3%, transparent),
+      0 10px 30px -18px color-mix(in oklab, var(--ink) 22%, transparent);
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* Hassan's world gets a faint engineering grid. */
+  .bg-hassan {
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+  }
+  /* Whitney's world gets soft, organic light. */
+  .bg-whitney {
+    background:
+      radial-gradient(60% 80% at 10% 10%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 70%),
+      radial-gradient(50% 70% at 90% 30%, color-mix(in oklab, var(--accent-2) 16%, transparent), transparent 70%);
+  }
+  /* Our story: petals of warm light. */
+  .bg-us {
+    background:
+      radial-gradient(45% 60% at 50% 0%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 70%),
+      radial-gradient(35% 45% at 85% 70%, color-mix(in oklab, var(--gold-2) 18%, transparent), transparent 70%);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .rise {
+      animation: rise 0.6s var(--ease-lux) both;
+    }
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+    }
+    .petal {
+      animation: sway 6s ease-in-out infinite;
+      transform-origin: bottom center;
+    }
+    @keyframes sway {
+      50% {
+        transform: rotate(4deg);
+      }
+    }
+  }
+
+  @keyframes u-rotate {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ─── Premium surfaces ──────────────────────────────────────────────────── */
+  .card-glow {
+    position: relative;
+    background:
+      linear-gradient(var(--surface), var(--surface)) padding-box,
+      linear-gradient(135deg, color-mix(in oklab, var(--accent) 45%, transparent), var(--line) 40%, color-mix(in oklab, var(--gold-2) 60%, transparent))
+        border-box;
+    border: 1px solid transparent;
+    border-radius: 22px;
+  }
+  .lift {
+    transition:
+      transform 0.35s var(--ease-lux),
+      box-shadow 0.35s ease;
+  }
+  .lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 28px 56px -30px var(--glow);
+  }
+  .display-xl {
+    font-family: var(--font-fraunces), Georgia, serif;
+    font-size: clamp(2.6rem, 7vw, 5.2rem);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+  }
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  @keyframes float-up {
+    0% {
+      transform: translateY(0) scale(0.6);
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-85vh) scale(1.2) rotate(12deg);
+      opacity: 0;
+    }
+  }
+
+  /* ─── The night stage: a cinematic, always-dark canvas ──────────────────── */
+  .stage {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: #f4ede2;
+    background:
+      radial-gradient(70% 90% at 88% 0%, rgb(122 32 64 / 0.42), transparent 62%), radial-gradient(60% 80% at 0% 100%, rgb(40 36 92 / 0.45), transparent 60%),
+      radial-gradient(40% 50% at 55% 55%, rgb(214 182 124 / 0.07), transparent 70%), linear-gradient(180deg, #0e0b14 0%, #08070b 100%);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.07) inset,
+      0 50px 120px -50px rgb(18 6 20 / 0.6);
+  }
+  /* A hairline of gold around the stage. */
+  .stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(160deg, rgb(240 220 174 / 0.45), rgb(240 220 174 / 0.06) 30%, rgb(240 220 174 / 0.04) 70%, rgb(240 220 174 / 0.32));
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  .stage::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.06;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .aurora {
+    position: absolute;
+    inset: -20%;
+    z-index: -1;
+    pointer-events: none;
+    filter: blur(70px) saturate(1.1);
+  }
+  .aurora span {
+    position: absolute;
+    border-radius: 50%;
+    opacity: 0.5;
+  }
+  .aurora span:nth-child(1) {
+    width: 46%;
+    height: 46%;
+    left: 52%;
+    top: 8%;
+    background: radial-gradient(circle, rgb(190 48 88 / 0.75), transparent 65%);
+  }
+  .aurora span:nth-child(2) {
+    width: 40%;
+    height: 40%;
+    left: 8%;
+    top: 48%;
+    background: radial-gradient(circle, rgb(72 70 170 / 0.7), transparent 65%);
+  }
+  .aurora span:nth-child(3) {
+    width: 30%;
+    height: 30%;
+    left: 38%;
+    top: 30%;
+    background: radial-gradient(circle, rgb(214 178 112 / 0.45), transparent 65%);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .aurora span:nth-child(1) {
+      animation: drift-a 26s ease-in-out infinite alternate;
+    }
+    .aurora span:nth-child(2) {
+      animation: drift-b 32s ease-in-out infinite alternate;
+    }
+    .aurora span:nth-child(3) {
+      animation: drift-c 22s ease-in-out infinite alternate;
+    }
+  }
+  @keyframes drift-a {
+    to {
+      transform: translate(-14%, 18%) scale(1.15);
+    }
+  }
+  @keyframes drift-b {
+    to {
+      transform: translate(20%, -12%) scale(1.2);
+    }
+  }
+  @keyframes drift-c {
+    to {
+      transform: translate(-10%, -16%) scale(0.85);
+    }
+  }
+
+  .stars circle {
+    fill: #fff6e4;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .stars .tw {
+      animation: twinkle 5s ease-in-out infinite;
+    }
+  }
+  @keyframes twinkle {
+    50% {
+      opacity: 0.12;
+    }
+  }
+
+  /* ─── Gold: type, lines and labels ──────────────────────────────────────── */
+  .gold-shimmer {
+    background: linear-gradient(100deg, #f6e6c1 0%, #d9b374 28%, #fbeccd 50%, #c09152 72%, #f3dfb2 100%);
+    background-size: 220% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .gold-shimmer {
+      animation: shimmer 9s linear infinite;
+    }
+  }
+  @keyframes shimmer {
+    to {
+      background-position: -220% center;
+    }
+  }
+  /* On light surfaces the gold needs more depth to stay legible. */
+  .gold-deep {
+    background: linear-gradient(100deg, #8a6430, #b98f52 45%, #7d5a2a);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  @media (prefers-color-scheme: dark) {
+    .gold-deep {
+      background: linear-gradient(100deg, #f0d9a8, #d3ac6b 45%, #f4e2bc);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+  }
+
+  .rule-gold {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold-2) 18%, var(--gold-2) 82%, transparent);
+    opacity: 0.55;
+  }
+  .eyebrow-lux {
+    font-size: 0.68rem;
+    line-height: 1;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--gold);
+  }
+  .stage .eyebrow-lux {
+    color: #e2c794;
+  }
+
+  /* ─── The verse: words arrive one at a time ─────────────────────────────── */
+  .verse .w {
+    display: inline-block;
+    white-space: pre;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .verse .w {
+      opacity: 0;
+      filter: blur(10px);
+      transform: translateY(0.3em);
+      animation: word-in 1.2s var(--ease-lux) forwards;
+      animation-delay: calc(var(--i) * 75ms + 150ms);
+    }
+    .fade-late {
+      opacity: 0;
+      animation: fade-in 1.4s var(--ease-lux) forwards;
+      animation-delay: var(--d, 900ms);
+    }
+  }
+  @keyframes word-in {
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: none;
+    }
+  }
+  @keyframes fade-in {
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* ─── Buttons on the stage ──────────────────────────────────────────────── */
+  .btn-gold {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    border-radius: 999px;
+    padding: 0.8rem 1.4rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.01em;
+    color: #1a1206;
+    background: linear-gradient(180deg, #f6e3b8, #d6ad69);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.6) inset,
+      0 -1px 0 rgb(120 80 30 / 0.35) inset,
+      0 12px 30px -12px rgb(214 173 105 / 0.55);
+    transition:
+      transform 0.2s var(--ease-lux),
+      box-shadow 0.2s ease,
+      filter 0.2s ease;
+  }
+  .btn-gold:hover {
+    filter: brightness(1.05);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.6) inset,
+      0 -1px 0 rgb(120 80 30 / 0.35) inset,
+      0 16px 36px -12px rgb(214 173 105 / 0.7);
+  }
+  .btn-gold:active {
+    transform: translateY(1px);
+  }
+  .btn-glass {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    border-radius: 999px;
+    padding: 0.8rem 1.3rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: #f4ede2;
+    background: rgb(255 255 255 / 0.06);
+    border: 1px solid rgb(255 255 255 / 0.14);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease;
+  }
+  .btn-glass:hover {
+    background: rgb(255 255 255 / 0.1);
+    border-color: rgb(240 220 174 / 0.35);
+  }
+
+  /* ─── Refined surfaces for the rest of the site ─────────────────────────── */
+  .tile {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.6) inset,
+      0 1px 2px color-mix(in oklab, var(--ink) 4%, transparent),
+      0 18px 40px -28px color-mix(in oklab, var(--ink) 30%, transparent);
+  }
+  @media (prefers-color-scheme: dark) {
+    .tile {
+      box-shadow:
+        0 1px 0 rgb(255 255 255 / 0.04) inset,
+        0 18px 40px -28px rgb(0 0 0 / 0.8);
+    }
+  }
+  .glass {
+    background: color-mix(in oklab, var(--surface) 78%, transparent);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  }
+  .toast {
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: color-mix(in oklab, var(--surface) 88%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: 0 24px 60px -24px rgb(0 0 0 / 0.35);
+  }
+  .num-lux {
+    font-family: var(--font-cormorant), Georgia, serif;
+    font-weight: 400;
+    font-variant-numeric: lining-nums tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ─── Chat ──────────────────────────────────────────────────────────────── */
+  .chat-wall {
+    background-color: color-mix(in oklab, var(--bg) 70%, var(--surface-2));
+    background-image:
+      radial-gradient(circle at 20% 30%, color-mix(in oklab, var(--gold-2) 22%, transparent) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 70% 80%, color-mix(in oklab, var(--ink) 10%, transparent) 0.6px, transparent 1.3px),
+      radial-gradient(circle at 85% 20%, color-mix(in oklab, var(--gold-2) 16%, transparent) 0.5px, transparent 1.2px);
+    background-size:
+      46px 46px,
+      64px 64px,
+      90px 90px;
+  }
+  .bubble-mine {
+    background: color-mix(in oklab, var(--accent) 13%, var(--surface));
+  }
+  .bubble-theirs {
+    background: var(--surface);
+  }
+  @media (prefers-color-scheme: dark) {
+    .bubble-mine {
+      background: color-mix(in oklab, var(--accent) 26%, var(--surface));
+    }
+    .bubble-theirs {
+      background: var(--surface-2);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .bubble-in {
+      animation: bubble-in 0.32s var(--ease-lux) both;
+    }
+    .flash {
+      animation: flash 1.6s ease;
+    }
+  }
+  @keyframes bubble-in {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(6px) scale(0.98);
     }
   }
-  .petal {
-    animation: sway 6s ease-in-out infinite;
-    transform-origin: bottom center;
+  @keyframes flash {
+    20% {
+      background-color: color-mix(in oklab, var(--gold-2) 30%, transparent);
+    }
   }
-  @keyframes sway {
+  .typing-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.35;
+    animation: typing 1.2s ease-in-out infinite;
+  }
+  .typing-dot:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .typing-dot:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  @keyframes typing {
+    30% {
+      opacity: 1;
+      transform: translateY(-3px);
+    }
+  }
+
+  /* ─── Calls ─────────────────────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: no-preference) {
+    .ring-wave {
+      animation: ring-wave 2.2s ease-out infinite;
+    }
+    .ring-wave:nth-child(2) {
+      animation-delay: 0.7s;
+    }
+    .ring-wave:nth-child(3) {
+      animation-delay: 1.4s;
+    }
+    .ring-shake {
+      animation: ring-shake 1.6s ease-in-out infinite;
+    }
+  }
+  @keyframes ring-wave {
+    from {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    to {
+      transform: scale(2.1);
+      opacity: 0;
+    }
+  }
+  @keyframes ring-shake {
+    0%,
+    50%,
+    100% {
+      transform: rotate(0);
+    }
+    10%,
+    30% {
+      transform: rotate(-14deg);
+    }
+    20%,
+    40% {
+      transform: rotate(14deg);
+    }
+  }
+}
+
+/* ─── The orbit on the home stage ──────────────────────────────────────── */
+@layer components {
+  .orbit .orbit-spin,
+  .orbit .orbit-dash,
+  .orbit .orbit-breathe {
+    transform-box: view-box;
+    transform-origin: 280px 280px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .orbit .orbit-spin {
+      animation: u-rotate 70s linear infinite;
+    }
+    .orbit .orbit-dash {
+      animation: u-rotate 240s linear infinite reverse;
+    }
+    .orbit .orbit-breathe {
+      animation: breathe 7s ease-in-out infinite;
+    }
+  }
+  @keyframes breathe {
     50% {
-      transform: rotate(4deg);
+      transform: scale(1.12);
+      opacity: 0.75;
     }
   }
-}
-
-/* ─── Universe illustration ─────────────────────────────────────────────── */
-.universe .u-stars circle {
-  fill: var(--ink);
-  opacity: 0.35;
-}
-.universe .u-orbit {
-  fill: none;
-  stroke: var(--ink);
-  stroke-opacity: 0.12;
-}
-.universe .u-label {
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-size: 18px;
-  font-weight: 600;
-  fill: var(--ink);
-}
-.universe .u-spin,
-.universe .u-planet,
-.universe .u-heart,
-.universe .u-pulse {
-  transform-box: view-box;
-}
-.universe .u-spin {
-  transform-origin: 300px 300px;
-}
-.universe .u-heart,
-.universe .u-pulse {
-  transform-origin: 300px 300px;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .universe .u-spin {
-    animation: u-rotate 60s linear infinite;
-  }
-  .universe .u-planet {
-    animation: u-rotate 60s linear infinite reverse;
-  }
-  .universe .u-heart {
-    animation: u-beat 2.4s ease-in-out infinite;
-  }
-  .universe .u-pulse {
-    animation: u-glow 2.4s ease-in-out infinite;
-  }
-  .universe .u-stars circle {
-    animation: u-twinkle 4s ease-in-out infinite;
-  }
-}
-@keyframes u-rotate {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes u-beat {
-  0%, 100% { transform: scale(1); }
-  12% { transform: scale(1.12); }
-  24% { transform: scale(1); }
-  36% { transform: scale(1.08); }
-}
-@keyframes u-glow {
-  50% { opacity: 0.55; transform: scale(1.08); }
-}
-@keyframes u-twinkle {
-  50% { opacity: 0.08; }
-}
-
-/* ─── Premium surfaces ──────────────────────────────────────────────────── */
-.card {
-  box-shadow:
-    0 1px 0 color-mix(in oklab, var(--ink) 4%, transparent),
-    0 8px 24px -12px color-mix(in oklab, var(--ink) 18%, transparent);
-}
-.card-glow {
-  position: relative;
-  background:
-    linear-gradient(var(--surface), var(--surface)) padding-box,
-    linear-gradient(135deg, color-mix(in oklab, var(--accent) 55%, transparent), var(--line) 40%, color-mix(in oklab, var(--accent-2) 55%, transparent)) border-box;
-  border: 1px solid transparent;
-  border-radius: 22px;
-}
-.lift {
-  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease;
-}
-.lift:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 24px 48px -24px var(--glow);
-}
-.text-gradient {
-  background: linear-gradient(100deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.display-xl {
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-size: clamp(2.6rem, 7vw, 5.2rem);
-  line-height: 1.02;
-  letter-spacing: -0.03em;
-  font-weight: 600;
-}
-.grain::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-@keyframes float-up {
-  0% { transform: translateY(0) scale(0.6); opacity: 0; }
-  15% { opacity: 1; }
-  100% { transform: translateY(-85vh) scale(1.2) rotate(12deg); opacity: 0; }
 }

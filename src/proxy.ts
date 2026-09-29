@@ -8,13 +8,17 @@ import { NextResponse, type NextRequest } from "next/server";
 export function proxy(request: NextRequest) {
   if (!request.cookies.has("ou_session")) {
     const url = new URL("/login", request.url);
-    if (request.nextUrl.pathname !== "/") url.searchParams.set("next", request.nextUrl.pathname);
+    // Keep the whole destination (e.g. a call notification's ?call=…) so sign-in lands exactly there.
+    if (request.nextUrl.pathname !== "/") url.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
   return NextResponse.next();
 }
 
 export const config = {
-  // Public: sign-in, public profiles, the cron endpoint (secret-protected), and static assets.
-  matcher: ["/((?!login|p/|api/cron|_next/static|_next/image|favicon.ico|icon|robots.txt).*)"],
+  // Public: sign-in, public profiles, the cron endpoint (secret-protected), static assets,
+  // the service worker and app manifest (browsers fetch these without following redirects),
+  // and the call API, which checks every request itself (a signed "Decline" from a notification
+  // must reach it from a signed-out device).
+  matcher: ["/((?!login|p/|api/cron|api/call|_next/static|_next/image|favicon.ico|icon|apple-icon|apple-touch-icon.png|robots.txt|sw.js|manifest.webmanifest).*)"],
 };

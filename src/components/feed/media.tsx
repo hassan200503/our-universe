@@ -53,7 +53,7 @@ export function VideoPlayer({ youtubeId, title, thumb }: { youtubeId: string; ti
     <div className="relative aspect-video w-full overflow-hidden rounded-t-[17px] bg-black">
       {!playing && (
         <button type="button" onClick={together} disabled={joining} className="absolute right-2 top-2 z-10 rounded-full bg-black/65 px-3 py-1 text-xs font-semibold text-white backdrop-blur transition hover:bg-black/80">
-          {joining ? "Opening…" : "🎧 Watch together"}
+          {joining ? "Opening…" : "Watch together"}
         </button>
       )}
       {playing ? (

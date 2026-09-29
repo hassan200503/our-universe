@@ -2,34 +2,44 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { IconCompass, IconHeadphones, IconHeart, IconHome, IconImage } from "./icons";
 import { usePulse } from "./pulse";
 
 /** Phone navigation: the places you go most, always under the thumb. */
 export function BottomNav() {
   const path = usePathname();
   const { data } = usePulse();
+  if (path.startsWith("/together/chat")) return null;
   const partnerInRoom = data?.partners.some((p) => p.place === "room");
   const items = [
-    { href: "/", label: "Home", icon: "✦", match: (p: string) => p === "/" || p.startsWith("/world") },
-    { href: "/story", label: "Story", icon: "❤", match: (p: string) => p.startsWith("/story") },
-    { href: "/gallery", label: "Gallery", icon: "📸", match: (p: string) => p.startsWith("/gallery"), badge: data?.unseenGallery ?? 0 },
-    { href: "/together", label: "Together", icon: "🎧", match: (p: string) => p.startsWith("/together"), live: partnerInRoom },
-    { href: "/discover", label: "Discover", icon: "✧", match: (p: string) => p.startsWith("/discover") || p.startsWith("/learning") },
+    { href: "/", label: "Home", Icon: IconHome, match: (p: string) => p === "/" || p.startsWith("/world") },
+    { href: "/story", label: "Story", Icon: IconHeart, match: (p: string) => p.startsWith("/story") },
+    { href: "/gallery", label: "Gallery", Icon: IconImage, match: (p: string) => p.startsWith("/gallery"), badge: data?.unseenGallery ?? 0 },
+    { href: "/together", label: "Together", Icon: IconHeadphones, match: (p: string) => p.startsWith("/together"), badge: data?.chat?.unread ?? 0, live: partnerInRoom },
+    { href: "/discover", label: "Discover", Icon: IconCompass, match: (p: string) => p.startsWith("/discover") || p.startsWith("/learning") },
   ];
   return (
-    <nav aria-label="Main" className="fixed inset-x-3 bottom-3 z-40 rounded-2xl border border-line bg-surface/85 px-2 py-1.5 shadow-lg backdrop-blur-xl sm:hidden" style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}>
+    <nav
+      aria-label="Main"
+      className="glass fixed inset-x-3 bottom-3 z-40 rounded-[22px] border border-line px-1.5 py-1.5 shadow-[0_20px_50px_-20px_rgb(0_0_0/0.45)] sm:hidden"
+      style={{ marginBottom: "env(safe-area-inset-bottom)" }}
+    >
       <ul className="grid grid-cols-5">
-        {items.map((i) => {
+        {items.map(({ Icon, ...i }) => {
           const on = i.match(path);
           return (
             <li key={i.label}>
-              <Link href={i.href} aria-current={on ? "page" : undefined} data-world="us" className={`relative flex flex-col items-center gap-0.5 rounded-xl py-1.5 text-[0.68rem] font-semibold ${on ? "bg-accent-soft text-accent" : "text-muted"}`}>
-                <span aria-hidden className="text-lg leading-none">
-                  {i.icon}
+              <Link
+                href={i.href}
+                aria-current={on ? "page" : undefined}
+                className={`relative flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[0.64rem] font-semibold tracking-wide transition-colors ${on ? "text-ink" : "text-muted"}`}
+              >
+                <span className={`grid h-7 w-12 place-items-center rounded-full transition-colors ${on ? "bg-gold-soft text-gold" : ""}`}>
+                  <Icon size={20} strokeWidth={on ? 1.9 : 1.6} />
                 </span>
                 {i.label}
-                {!!i.badge && <span className="absolute right-2 top-0.5 rounded-full bg-accent px-1.5 text-[0.6rem] text-accent-ink">{i.badge}</span>}
-                {i.live && <span className="absolute right-3 top-1 size-2 animate-pulse rounded-full bg-emerald-500" aria-label="Your partner is in the room" />}
+                {!!i.badge && <span className="absolute right-2.5 top-0 grid min-w-[1.05rem] place-items-center rounded-full bg-emerald-500 px-1 text-[0.58rem] leading-[1.05rem] text-white ring-2 ring-surface">{i.badge}</span>}
+                {i.live && !i.badge && <span className="absolute right-4 top-1 size-2 animate-pulse rounded-full bg-emerald-500" aria-label="Your partner is in the room" />}
               </Link>
             </li>
           );

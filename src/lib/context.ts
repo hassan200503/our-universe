@@ -24,12 +24,10 @@ export type Ctx = {
   members: PublicPerson[];
 };
 
-/** The signed-in person and their relationship, or null. Cached per request. */
-export const getCtx = cache(async (): Promise<Ctx | null> => {
-  const session = await readSession();
-  if (!session) return null;
+/** Someone's context by id: their relationship and partner. Only for trusted server code. */
+export async function ctxFor(personId: string): Promise<Ctx | null> {
   const db = await getDb();
-  const [me] = await db.select().from(people).where(eq(people.id, session.personId));
+  const [me] = await db.select().from(people).where(eq(people.id, personId));
   if (!me) return null;
   const [link] = await db
     .select({ r: relationships })
@@ -45,6 +43,12 @@ export const getCtx = cache(async (): Promise<Ctx | null> => {
     .where(and(eq(relationshipMembers.relationshipId, link.r.id), ne(people.id, me.id)));
   const [meP, ...partners] = await Promise.all([strip(me), ...others.map((o) => strip(o.p))]);
   return { me: meP, relationship: link.r, partners, members: [meP, ...partners] };
+}
+
+/** The signed-in person and their relationship, or null. Cached per request. */
+export const getCtx = cache(async (): Promise<Ctx | null> => {
+  const session = await readSession();
+  return session ? ctxFor(session.personId) : null;
 });
 
 /** For pages and actions: the context, or a redirect to sign in. */
