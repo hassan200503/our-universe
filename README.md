@@ -20,6 +20,10 @@ Hassan's world, Whitney's world, and the story they're writing together, plus li
 
 | Area | Where |
 | --- | --- |
+| Home: the night stage with a journey verse that changes on every visit, a live journey clock, the road ahead, a moment from your journey | `/` |
+| Messages: typing indicator, sent / delivered / read ticks, swipe or hold to reply, reactions, edit, delete for me or for everyone | `/together/chat` |
+| Voice and video calls, from Messages, the partner menu in the header, or the home page | anywhere |
+| Together room: listen and watch in sync, with the chat beside you | `/together` |
 | Our Story: memories, milestones, adventures, plans, saved discoveries | `/story` |
 | Each person's world: profile, dashboard, journal, radar, skills, Knowledge Vault | `/world/[slug]` |
 | Hassan only: Things I'm Building, Questions I'm Thinking About | `/world/hassan/projects`, `/world/hassan/thinking` |
@@ -40,6 +44,13 @@ Her name is **Whitney**, and that is what every profile, route and heading uses.
 ### Privacy
 
 Everything personal has a visibility: 🔒 **private** (owner only), 💞 **shared** (the two of you), or 🌍 **public** (only on an enabled public profile). Vault and thinking-journal entries default to private. The rule is implemented once, in `visibleTo()` (`src/lib/context.ts`), and every read goes through it.
+
+## Messages and calls
+
+- **Messages** live in their own table (`messages`), so replies, reactions, edits and "delete for everyone" keep their place in the conversation. Clients poll `/api/chat?since=…` every 1.5 s while you're both online (4 s otherwise, paused in the background). Each send carries an id made on the device, so a retry is stored once.
+- **Typing and receipts** come from `chat_state`: `typing_until` for the dots, `last_delivered_id` (set when a partner's device fetches) and `last_read_id` (set while the chat is on screen) for ✓, ✓✓ and blue ✓✓.
+- **Calls** are peer-to-peer WebRTC: audio and video go directly between the two browsers, encrypted end to end. The server only relays the handshake (`calls`, `call_signals`) through `/api/call`. Every call negotiates both audio and video, so turning the camera on mid-call is instant; a data channel carries mute, camera and hang-up; the caller restarts ICE when a network changes. Calls ring anywhere on the site within a few seconds (the pulse checks in every 3 s while your partner is online), and each call leaves a line in the chat.
+- **Ringing when the site is closed** uses Web Push (`public/sw.js`). Each person turns it on per device (Messages banner or Settings → Calls & alerts). The VAPID keys are derived from the session secret, so there is nothing to configure. iPhones need the site added to the Home Screen first.
 
 ## The Live Trends Engine
 
@@ -69,7 +80,7 @@ npm run dev
 No database setup is needed: without `DATABASE_URL`, an embedded Postgres (PGlite) lives in `.data/`. It allows one process at a time, so stop `npm run dev` before running `seed`, `ingest` or `retag`. The passcodes the seed generated are in `.env.local`.
 
 ```bash
-npm test          # engine + visibility unit tests
+npm test          # engine, visibility, journey clock, verse rotation and chat formatting tests
 npm run typecheck
 npm run lint
 ```

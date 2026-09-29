@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { sql } from "drizzle-orm";
 
 /**
  * Where photos, videos and songs live.
@@ -69,12 +70,42 @@ export function ownsPath(relationshipId: string, p: string | null | undefined): 
 type Delegation = { delegationToken: string; clientSigningToken: string; validUntil: number };
 const g = globalThis as unknown as { __blobDelegation?: Promise<Delegation> };
 const HOUR = 3600_000;
+const KV_KEY = "blob-read-delegation";
+
+/**
+ * The read delegation is shared by every server instance (kept in the kv
+ * table), because it's part of each signed URL: one shared delegation means a
+ * file has the same URL no matter which instance signed it, so browsers and
+ * the CDN keep serving it from cache instead of downloading it again.
+ */
+async function sharedDelegation(): Promise<Delegation> {
+  const { getDb, withSchema } = await import("@/lib/db/client");
+  const { kv } = await import("@/lib/db/schema");
+  const { eq } = await import("drizzle-orm");
+  const db = await getDb();
+  const fresh = (d: Delegation | null | undefined): d is Delegation => !!d && d.validUntil - Date.now() > 7 * HOUR;
+  const stored = await withSchema(async () => (await db.select().from(kv).where(eq(kv.key, KV_KEY)))[0]?.value as Delegation | undefined).catch(() => undefined);
+  if (fresh(stored)) return stored;
+  const { issueSignedToken } = await import("@vercel/blob");
+  const issued = await issueSignedToken({ operations: ["get", "head"], validUntil: Date.now() + 12 * HOUR });
+  const d: Delegation = { delegationToken: issued.delegationToken, clientSigningToken: issued.clientSigningToken, validUntil: issued.validUntil };
+  // If two instances race, the first write wins and both read it back.
+  await db
+    .insert(kv)
+    .values({ key: KV_KEY, value: d, expiresAt: new Date(d.validUntil) })
+    .onConflictDoUpdate({ target: kv.key, set: { value: d, expiresAt: new Date(d.validUntil), updatedAt: new Date() }, setWhere: sql`${kv.expiresAt} < ${new Date(Date.now() + 7 * HOUR).toISOString()}::timestamptz` })
+    .catch(() => {});
+  const [row] = await db.select().from(kv).where(eq(kv.key, KV_KEY)).catch(() => []);
+  return fresh(row?.value as Delegation) ? (row!.value as Delegation) : d;
+}
 
 async function delegation(): Promise<Delegation> {
   const current = g.__blobDelegation ? await g.__blobDelegation.catch(() => null) : null;
   if (current && current.validUntil - Date.now() > 7 * HOUR) return current;
-  const { issueSignedToken } = await import("@vercel/blob");
-  g.__blobDelegation = issueSignedToken({ operations: ["get", "head"], validUntil: Date.now() + 12 * HOUR });
+  g.__blobDelegation = sharedDelegation().catch(async () => {
+    const { issueSignedToken } = await import("@vercel/blob");
+    return issueSignedToken({ operations: ["get", "head"], validUntil: Date.now() + 12 * HOUR }) as Promise<Delegation>;
+  });
   return g.__blobDelegation;
 }
 

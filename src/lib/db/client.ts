@@ -48,3 +48,44 @@ export function getDb(): Promise<Db> {
   globalForDb.__db ??= create();
   return globalForDb.__db;
 }
+
+const g = globalThis as unknown as { __migrated?: Promise<void> };
+
+/** Applies any pending migrations (idempotent). */
+export async function migrateNow(): Promise<void> {
+  const url = process.env.DATABASE_URL;
+  const db = await getDb();
+  const folder = path.join(process.cwd(), "drizzle");
+  if (!url) {
+    // The embedded database migrates when it opens; this catches a server that stayed up across a new migration.
+    const { migrate } = await import("drizzle-orm/pglite/migrator");
+    await migrate(db as never, { migrationsFolder: folder });
+  } else if (/\.neon\.tech[/:?]/.test(url)) {
+    const { migrate } = await import("drizzle-orm/neon-serverless/migrator");
+    await migrate(db as never, { migrationsFolder: folder });
+  } else {
+    const { migrate } = await import("drizzle-orm/node-postgres/migrator");
+    await migrate(db, { migrationsFolder: folder });
+  }
+}
+
+/**
+ * Runs a query that touches tables added after launch. Deploys migrate during
+ * the build, but if a server ever runs ahead of its database (a missing table
+ * or column), it applies the pending migrations once and retries, instead of
+ * failing for everyone until the next scheduled migration.
+ */
+export async function withSchema<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    const code = (e as { code?: string; cause?: { code?: string } }).code ?? (e as { cause?: { code?: string } }).cause?.code;
+    if (code !== "42P01" && code !== "42703") throw e;
+    g.__migrated ??= migrateNow().catch((err) => {
+      g.__migrated = undefined;
+      throw err;
+    });
+    await g.__migrated;
+    return fn();
+  }
+}

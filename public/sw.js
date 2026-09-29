@@ -1,0 +1,115 @@
+/*
+ * Our Universe service worker: push only. It never intercepts page loads,
+ * so the site always behaves exactly as it does without it.
+ *
+ *  - An incoming call rings as a notification with Answer / Decline, unless
+ *    the site is already open and visible (then the page rings itself).
+ *  - A message shows as a notification when the site isn't on screen.
+ *  - "call-end" closes a ringing notification: a call nobody answered becomes
+ *    a "Missed call" notice; one answered on another device just goes quiet.
+ */
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+
+async function visibleClient() {
+  const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const c of list) c.postMessage({ type: "push" });
+  return list.find((c) => c.visibilityState === "visible" && c.focused) ?? list.find((c) => c.visibilityState === "visible");
+}
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    return;
+  }
+  event.waitUntil(
+    (async () => {
+      const open = await visibleClient();
+      if (data.type === "call-end") {
+        const tag = `call-${data.callId}`;
+        (await self.registration.getNotifications({ tag })).forEach((n) => n.close());
+        if (open) return;
+        const kind = data.kind === "video" ? "video" : "voice";
+        if (data.reason === "missed") {
+          await self.registration.showNotification(`Missed ${kind} call`, {
+            body: `${data.title || "Your partner"} tried to reach you`,
+            tag: `missed-${data.callId}`,
+            icon: "/icon-192.png",
+            badge: "/icon-192.png",
+            data: { url: "/together/chat" },
+          });
+          return;
+        }
+        // Every push must show something while the site is closed: say it briefly and silently, then clear it.
+        await self.registration.showNotification(data.title || "Our Universe", {
+          body: data.reason === "answered" ? "Answered on another device" : "Call declined",
+          tag,
+          silent: true,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+        });
+        await new Promise((r) => setTimeout(r, 3000));
+        (await self.registration.getNotifications({ tag })).forEach((n) => n.close());
+        return;
+      }
+      if (data.type === "call") {
+        if (open) return;
+        await self.registration.showNotification(data.title || "Our Universe", {
+          body: data.body || "Incoming call",
+          tag: `call-${data.callId}`,
+          renotify: true,
+          requireInteraction: true,
+          vibrate: [500, 250, 500, 250, 500, 250, 500],
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+          data: { url: data.url, callId: data.callId },
+          actions: [
+            { action: "answer", title: "Answer" },
+            { action: "decline", title: "Decline" },
+          ],
+        });
+        return;
+      }
+      if (data.type === "message") {
+        if (open) return;
+        await self.registration.showNotification(data.title || "Our Universe", {
+          body: data.body || "New message",
+          tag: data.tag || "chat",
+          renotify: true,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+          data: { url: data.url || "/together/chat" },
+        });
+      }
+    })(),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  const n = event.notification;
+  const { url = "/", callId } = n.data || {};
+  n.close();
+  event.waitUntil(
+    (async () => {
+      if (event.action === "decline" && callId) {
+        await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ action: "decline", id: callId }) }).catch(() => {});
+        return;
+      }
+      const answer = event.action === "answer" && callId;
+      const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = list.find((c) => new URL(c.url).origin === self.location.origin);
+      if (existing) {
+        // Hand the call to the open tab rather than reloading it.
+        await existing.focus();
+        existing.postMessage({ type: "push", answer: answer ? callId : null });
+        if (!callId && "navigate" in existing && !existing.url.includes("/together/chat")) await existing.navigate(new URL(url, self.location.origin).href).catch(() => {});
+        return;
+      }
+      const target = new URL(url, self.location.origin);
+      if (answer) target.searchParams.set("answer", "1");
+      await self.clients.openWindow(target.href);
+    })(),
+  );
+});

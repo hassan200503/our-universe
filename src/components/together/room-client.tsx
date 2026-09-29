@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { RoomAction, RoomPayload } from "@/lib/together/room";
@@ -8,9 +9,12 @@ import type { FeedPage } from "@/lib/trends/query";
 import { sendNudge } from "@/lib/actions/together";
 import { youtubeIdFrom, youtubeThumb } from "@/lib/media/youtube";
 import { Avatar } from "@/components/avatar";
+import { ChatView } from "@/components/chat/chat-view";
+import { IconHeadphones, IconMessage, IconNext, IconPause, IconPlay } from "@/components/icons";
 import { useMe, useMembers } from "@/components/me-context";
+import { usePulse } from "@/components/pulse";
 import { ago } from "@/lib/ui/time";
-import { FilePlayer, type PlayerHandle, YouTubePlayer } from "./player";
+import { FilePlayer, type PlayerHandle, Prefetch, warmYouTube, YouTubePlayer } from "./player";
 
 type State = NonNullable<RoomPayload["state"]>;
 type Ev = RoomPayload["events"][number];
@@ -30,8 +34,8 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
   const [dur, setDur] = useState(0);
   const [volume, setVolume] = useState(1);
   const [floaters, setFloaters] = useState<{ id: number; emoji: string; x: number }[]>([]);
-  const [msg, setMsg] = useState("");
   const [link, setLink] = useState("");
+  const pulse = usePulse();
   const [inSync, setInSync] = useState(true);
   const [, startNudge] = useTransition();
 
@@ -46,6 +50,7 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
     offset.current = Date.parse(initial.serverNow) - Date.now();
   }, [initial.serverNow]);
   const player = useRef<PlayerHandle>(null);
+  useEffect(() => warmYouTube(), []);
   const ready = useRef(false);
   const lastSeek = useRef(0);
   const endedSent = useRef<string | null>(null);
@@ -220,11 +225,10 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
     staleTime: 60_000,
   });
 
-  const chat = useMemo(() => events.filter((e) => e.kind === "chat" || e.kind === "system"), [events]);
-  const chatEnd = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    chatEnd.current?.scrollIntoView({ block: "nearest" });
-  }, [chat.length]);
+  // What just happened in the room ("Whitney started playing …"); messages live in the chat.
+  const activity = useMemo(() => events.filter((e) => e.kind === "system").slice(-3).reverse(), [events]);
+  const nextUp = state?.queue[0];
+  const unread = pulse.data?.chat?.unread ?? 0;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
@@ -242,7 +246,7 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
           </div>
           {!pState?.here && (
             <button className="btn" onClick={() => startNudge(async () => void (await sendNudge("invite")))}>
-              🎧 Invite {partner?.displayName.split(" ")[0]}
+              <IconHeadphones size={16} /> Invite {partner?.displayName.split(" ")[0]}
             </button>
           )}
         </div>
@@ -250,7 +254,10 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
         {/* Stage */}
         <div data-world="us" className="relative mt-4 overflow-hidden rounded-3xl bg-black shadow-2xl">
           <div className={`relative ${isAudio || !key ? "aspect-[16/9] sm:aspect-[21/9]" : "aspect-video"}`}>
-            {key && ytId && <YouTubePlayer ref={player} videoId={ytId} audioOnly={isAudio} onReady={() => (ready.current = true)} onEnded={() => send({ type: "ended", key: key! })} />}
+            {key && ytId && (
+              <YouTubePlayer ref={player} videoId={ytId} audioOnly={isAudio} playing={state?.playing} startAt={expected} onReady={() => (ready.current = true)} onEnded={() => send({ type: "ended", key: key! })} />
+            )}
+            {nextUp?.url && !nextUp.youtubeId && nextUp.id !== key && <Prefetch key={nextUp.id} src={nextUp.url} kind={nextUp.kind === "song" ? "song" : "video"} />}
             {key && fileSrc && (
               <FilePlayer key={key} ref={player} src={fileSrc} kind={isAudio ? "song" : "video"} poster={state?.current?.thumbUrl} onReady={() => (ready.current = true)} onEnded={() => send({ type: "ended", key: key! })} />
             )}
@@ -268,8 +275,8 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
                   </div>
                 ) : (
                   <div>
-                    <p className="text-5xl">🎧</p>
-                    <p className="font-display mt-3 text-2xl font-semibold">Pick something to enjoy together</p>
+                    <IconHeadphones size={46} strokeWidth={1.3} className="mx-auto opacity-90" />
+                    <p className="font-lux mt-4 text-3xl font-medium">Pick something to enjoy together</p>
                     <p className="mt-1 text-sm opacity-80">A song from your gallery, a video, a knitting tutorial — or paste any YouTube link.</p>
                   </div>
                 )}
@@ -295,8 +302,8 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
           {/* Controls */}
           {key && (
             <div className="flex flex-wrap items-center gap-3 bg-zinc-950 px-4 py-3 text-white">
-              <button onClick={togglePlay} className="grid size-11 place-items-center rounded-full bg-white text-lg text-black" aria-label={state?.playing ? "Pause for both" : "Play for both"}>
-                {state?.playing ? "❚❚" : "▶"}
+              <button onClick={togglePlay} className="grid size-11 place-items-center rounded-full bg-white text-black transition active:scale-95" aria-label={state?.playing ? "Pause for both" : "Play for both"}>
+                {state?.playing ? <IconPause size={18} /> : <IconPlay size={18} className="translate-x-px" />}
               </button>
               <span className="w-10 text-right text-xs tabular-nums text-white/70">{fmt(now)}</span>
               <input
@@ -313,8 +320,8 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
                 aria-label="Position (moves it for both of you)"
               />
               <span className="w-10 text-xs tabular-nums text-white/70">{fmt(dur)}</span>
-              <button onClick={() => send({ type: "next" })} className="text-lg" aria-label="Next in queue" title="Next">
-                ⏭
+              <button onClick={() => send({ type: "next" })} className="grid size-9 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white" aria-label="Next in queue" title="Next">
+                <IconNext size={18} />
               </button>
               <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVolume(Number(e.target.value))} className="w-20 accent-pink-400" aria-label="My volume (only for me)" />
               <span className={`text-xs ${inSync ? "text-emerald-400" : "text-amber-300"}`}>{inSync ? (partnerHere ? `● In sync with ${partner?.displayName.split(" ")[0]}` : "● Ready") : "● Syncing…"}</span>
@@ -323,13 +330,35 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
         </div>
 
         {/* Reactions */}
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {REACTIONS.map((r) => (
             <button key={r} onClick={() => send({ type: "react", emoji: r })} className="grid size-11 place-items-center rounded-full border border-line text-xl transition hover:scale-110 hover:bg-surface-2" aria-label={`Send ${r}`}>
               {r}
             </button>
           ))}
         </div>
+
+        {activity.length > 0 && (
+          <ul className="mt-4 space-y-1 text-xs text-muted">
+            {activity.map((e) => (
+              <li key={e.id} suppressHydrationWarning>
+                <span className="font-semibold text-ink">{nameOf(e.slug)}</span> {e.body} · {ago(e.createdAt)}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Messages: on phones, one tap to the full chat */}
+        <Link href="/together/chat" className="tile mt-5 flex items-center gap-3 p-4 lg:hidden">
+          <span className="grid size-10 place-items-center rounded-full bg-gold-soft text-gold">
+            <IconMessage size={19} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">Messages with {partner?.displayName.split(" ")[0]}</span>
+            <span className="block text-xs text-muted">{unread ? `${unread} unread` : "Chat, call or video call"}</span>
+          </span>
+          {unread > 0 && <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-bold text-white">{unread}</span>}
+        </Link>
 
         {/* Queue */}
         {state && state.queue.length > 0 && (
@@ -420,39 +449,9 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
         </div>
       </div>
 
-      {/* Chat */}
-      <aside className="card flex h-[70dvh] flex-col lg:sticky lg:top-20">
-        <p className="border-b border-line p-4 font-semibold">💬 Chat while you listen</p>
-        <div className="flex-1 space-y-2 overflow-y-auto p-4 text-sm">
-          {chat.length === 0 && <p className="text-center text-muted">Say hi 👋</p>}
-          {chat.map((e) =>
-            e.kind === "system" ? (
-              <p key={e.id} className="text-center text-xs text-muted">
-                {nameOf(e.slug)} {e.body}
-              </p>
-            ) : (
-              <div key={e.id} className={`flex ${e.slug === me.slug ? "justify-end" : "justify-start"}`}>
-                <p data-world={members.find((m) => m.slug === e.slug)?.theme} className={`max-w-[80%] rounded-2xl px-3 py-2 ${e.slug === me.slug ? "bg-accent text-accent-ink" : "bg-surface-2"}`}>
-                  {e.body}
-                </p>
-              </div>
-            ),
-          )}
-          <div ref={chatEnd} />
-        </div>
-        <form
-          className="flex gap-2 border-t border-line p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const body = msg.trim();
-            if (!body) return;
-            setMsg("");
-            send({ type: "chat", body });
-          }}
-        >
-          <input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Type a message…" className="field py-2 text-sm" aria-label="Message" maxLength={500} />
-          <button className="btn px-4">Send</button>
-        </form>
+      {/* Chat: the same conversation as Messages, beside the stage on large screens */}
+      <aside className="hidden h-[calc(100dvh-7rem)] min-h-[34rem] lg:sticky lg:top-20 lg:block">
+        <ChatView variant="panel" />
       </aside>
     </div>
   );

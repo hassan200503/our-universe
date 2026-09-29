@@ -9,6 +9,7 @@ import { TOPICS, TOPIC_KEYS } from "@/lib/trends/topics";
 import { changePasscode, saveFeatures, saveInterests, savePreferences, saveProfile, saveRelationship } from "@/lib/actions/personal";
 import { ActionForm, Field } from "@/components/ui/forms";
 import { AvatarPicker } from "@/components/avatar-picker";
+import { AlertsSetting } from "@/components/push";
 import { storageMode } from "@/lib/media/storage";
 import { logout } from "@/lib/actions/auth";
 import { Container, PageHeader } from "@/components/ui/page-header";
@@ -97,9 +98,9 @@ export default async function SettingsPage() {
               </ActionForm>
             </section>
 
-<section id="us" data-world="us" className="card-glow scroll-mt-20 p-5">
-              <h2 className="font-display text-xl font-semibold">Us ❤️</h2>
-              <p className="text-sm text-muted">Shared by both of you. The start date powers the days-together counter and anniversaries.</p>
+            <section id="us" data-world="us" className="card-glow scroll-mt-20 p-5">
+              <h2 className="font-display text-xl font-semibold">Our journey</h2>
+              <p className="text-sm text-muted">Shared by both of you. The day it began powers the journey clock on the home page, and every anniversary.</p>
               <ActionForm action={saveRelationship} submit="Save" resetOnSuccess={false} className="mt-3 space-y-3">
                 <Field label="What do you call your universe?" name="rel-name">
                   <input id="rel-name" name="name" required defaultValue={ctx.relationship.name} className="field" />
@@ -111,6 +112,12 @@ export default async function SettingsPage() {
                   <input id="nextMeetOn" name="nextMeetOn" type="date" defaultValue={ctx.relationship.nextMeetOn ?? ""} className="field" />
                 </Field>
               </ActionForm>
+            </section>
+
+            <section id="alerts" className="card scroll-mt-20 p-5">
+              <h2 className="font-display text-xl font-semibold">Calls &amp; alerts</h2>
+              <p className="text-sm text-muted">Voice and video calls ring on any device where you&apos;re signed in. Turn alerts on for each phone or computer you want to ring when the site is closed.</p>
+              <AlertsSetting />
             </section>
 
             <section className="card p-5">

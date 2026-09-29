@@ -1,18 +1,14 @@
 /** Applies migrations to DATABASE_URL (production). PGlite migrates itself on first use. */
-import path from "node:path";
-import { getDb } from "../src/lib/db/client";
+import { migrateNow } from "../src/lib/db/client";
 
-getDb()
-  .then(async (db) => {
-    const url = process.env.DATABASE_URL;
-    const folder = path.join(process.cwd(), "drizzle");
-    if (url && /\.neon\.tech[/:?]/.test(url)) {
-      const { migrate } = await import("drizzle-orm/neon-serverless/migrator");
-      await migrate(db as never, { migrationsFolder: folder });
-    } else if (url) {
-      const { migrate } = await import("drizzle-orm/node-postgres/migrator");
-      await migrate(db, { migrationsFolder: folder });
-    }
+if (!process.env.DATABASE_URL) {
+  // Vercel preview builds without a database, or local builds: nothing to migrate.
+  console.log("No DATABASE_URL: skipping migrations.");
+  process.exit(0);
+}
+
+migrateNow()
+  .then(() => {
     console.log("Migrations applied.");
     process.exit(0);
   })

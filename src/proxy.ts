@@ -15,6 +15,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Public: sign-in, public profiles, the cron endpoint (secret-protected), and static assets.
-  matcher: ["/((?!login|p/|api/cron|_next/static|_next/image|favicon.ico|icon|robots.txt).*)"],
+  // Public: sign-in, public profiles, the cron endpoint (secret-protected), static assets,
+  // and the service worker and app manifest (browsers fetch these without following redirects).
+  matcher: ["/((?!login|p/|api/cron|_next/static|_next/image|favicon.ico|icon|apple-icon|apple-touch-icon.png|robots.txt|sw.js|manifest.webmanifest).*)"],
 };

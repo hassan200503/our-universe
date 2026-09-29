@@ -7,7 +7,23 @@ Hosting: **Neon** (Postgres), **Vercel Hobby** (the website — free, no card, p
 1. Sign in at vercel.com with GitHub.
 2. **Add New → Project →** import `hassan200503/our-universe` (allow Vercel access to that repository).
 3. Add one environment variable, `DATABASE_URL` (the Neon pooled string). Session cookies are signed with a key derived from it, so nothing else is required.
-4. Deploy. Every push to `main` redeploys automatically.
+4. Deploy. Every push to `main` redeploys automatically, and each build applies any new database migrations first (`npm run vercel-build`), so new features never run ahead of their tables.
+
+### Calls on mobile data (recommended, free)
+
+Calls connect directly between the two phones. On some mobile networks both ends sit behind strict NATs and need a relay (TURN) in the middle. Without one, calls still work on most Wi-Fi and many mobile networks; with one, they connect everywhere. Add **one** of these to the Vercel project's environment variables and redeploy:
+
+| Provider (free tier) | Variables |
+| --- | --- |
+| Cloudflare Realtime TURN (dash.cloudflare.com → Realtime → TURN → Create key) | `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN` |
+| Metered / Open Relay (metered.ca → TURN server → create app) | `METERED_TURN_DOMAIN` (e.g. `yourapp.metered.live`), `METERED_TURN_API_KEY` |
+| Any TURN server | `TURN_URLS` (comma-separated `turn:`/`turns:` URLs), `TURN_USERNAME`, `TURN_CREDENTIAL` |
+
+Credentials stay on the server; browsers get short-lived ones from `/api/call/ice`.
+
+### Call alerts when the site is closed
+
+Nothing to configure: push keys are derived from `DATABASE_URL` (or `SESSION_SECRET`). Each of you turns alerts on per device in **Settings → Calls & alerts**. On an iPhone, first open the site in Safari → Share → **Add to Home Screen**, then turn alerts on from the Home Screen app.
 
 > Free-tier limits change. Before relying on them, re-check each provider's current pricing page: Neon's free plan, Netlify's free plan (function timeouts, build minutes), and GitHub Actions minutes for **private** repositories.
 

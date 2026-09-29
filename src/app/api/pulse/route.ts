@@ -4,8 +4,12 @@ import { getCtx } from "@/lib/context";
 import { getDb } from "@/lib/db/client";
 import { media, presence, roomEvents, roomState } from "@/lib/db/schema";
 import { unseenCount } from "@/lib/media/queries";
+import { markDelivered, unreadSummary } from "@/lib/chat/server";
+import { currentCall } from "@/lib/calls/server";
+import type { CallView } from "@/lib/calls/types";
+import { withSchema } from "@/lib/db/client";
 
-const PLACES = new Set(["site", "room", "gallery", "away"]);
+const PLACES = new Set(["site", "room", "gallery", "chat", "away"]);
 
 export type PulseResponse = {
   serverNow: string;
@@ -14,6 +18,9 @@ export type PulseResponse = {
   room: { playing: boolean; title: string | null; bySlug: string | null; updatedAt: string } | null;
   events: { id: number; kind: string; body: string; slug: string }[];
   lastEventId: number;
+  chat: { unread: number; latest: { id: number; slug: string; body: string } | null };
+  /** A call I'm part of that is ringing or connected. */
+  call: CallView | null;
 };
 
 const ONLINE_MS = 70_000;
@@ -21,9 +28,10 @@ const ONLINE_MS = 70_000;
 /**
  * Heartbeat: records that I'm here (and where), and returns whether my partner
  * is online, what's playing in the Together room, new gallery posts, and any
- * nudges or invites sent to me since `after`.
- * Called every ~25 s while a tab is visible, and with {leave:true} via
- * sendBeacon when the tab is hidden or closed.
+ * nudges or invites sent to me since `after`, unread messages, and any call
+ * ringing for me. Called every few seconds while a tab is visible (faster
+ * while my partner is online, since that's when a call can come in), and
+ * with {leave:true} via sendBeacon when the tab is hidden or closed.
  */
 export async function POST(req: NextRequest) {
   const ctx = await getCtx();
@@ -41,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   const partnerIds = ctx.partners.map((p) => p.id);
   const after = typeof body.after === "number" && Number.isFinite(body.after) ? body.after : null;
-  const [states, unseen, [room], events, [latest]] = await Promise.all([
+  const [states, unseen, [room], events, [latest], chat, call] = await Promise.all([
     partnerIds.length ? db.select().from(presence).where(inArray(presence.personId, partnerIds)) : Promise.resolve([]),
     unseenCount(ctx),
     db
@@ -58,6 +66,12 @@ export async function POST(req: NextRequest) {
           .orderBy(roomEvents.id)
           .limit(10),
     db.select({ id: roomEvents.id }).from(roomEvents).where(eq(roomEvents.relationshipId, ctx.relationship.id)).orderBy(desc(roomEvents.id)).limit(1),
+    // Newer features never take presence down with them.
+    withSchema(async () => {
+      await markDelivered(ctx);
+      return unreadSummary(ctx);
+    }).catch(() => ({ unread: 0, latest: null })),
+    currentCall(ctx).catch(() => null),
   ]);
 
   const slugOf = (id: string | null) => ctx.members.find((m) => m.id === id)?.slug ?? null;
@@ -72,6 +86,8 @@ export async function POST(req: NextRequest) {
     room: room ? { playing: room.playing, title: room.title ?? room.mediaTitle, bySlug: slugOf(room.updatedBy), updatedAt: room.updatedAt.toISOString() } : null,
     events: events.map((e) => ({ id: e.id, kind: e.kind, body: e.body, slug: slugOf(e.personId) ?? "" })),
     lastEventId: Math.max(latest?.id ?? 0, ...events.map((e) => e.id)),
+    chat,
+    call,
   };
   return NextResponse.json(res, { headers: { "Cache-Control": "no-store" } });
 }
