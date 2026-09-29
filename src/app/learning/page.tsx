@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireCtx } from "@/lib/context";
 import { learningTogether } from "@/lib/data";
 import { addSharedLearning, deleteSharedLearning, toggleLearningFavorite } from "@/lib/actions/shared";
@@ -17,6 +18,9 @@ export default async function LearningPage() {
       <PageHeader world="us" eyebrow="Shared learning 📚" title="Things we are learning">
         A shared notebook for anything either of us found worth knowing — a scientific idea, a new technology, a nature fact, a philosophical idea, a book, a documentary, or
         something that just made us laugh.
+        <Link href="/research" className="btn btn-ghost mt-4 text-sm">
+          Research something new →
+        </Link>
       </PageHeader>
       <Container world="us">
         <div className="grid gap-10 lg:grid-cols-[1fr_22rem]">

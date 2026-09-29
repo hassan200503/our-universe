@@ -12,6 +12,9 @@ import { AvatarPicker } from "@/components/avatar-picker";
 import { AlertsSetting } from "@/components/push";
 import { storageMode } from "@/lib/media/storage";
 import { logout } from "@/lib/actions/auth";
+import { AiKeySetting, RelaySetting } from "@/components/settings/secrets";
+import { describeSecret, SECRET_GEMINI, SECRET_RELAY } from "@/lib/settings";
+import { relaySource } from "@/lib/calls/ice";
 import { Container, PageHeader } from "@/components/ui/page-header";
 
 export const metadata = { title: "Settings" };
@@ -24,6 +27,10 @@ export default async function SettingsPage() {
   const topics = await personTopics(me.id);
   const followed = SOURCES.filter((s) => topics.includes(s.topic));
   const categories = topics.flatMap((t) => [...TOPICS[t].categories.map((c) => c.name), TOPICS[t].fallbackCategory]);
+  const [gemini, relay] = await Promise.all([
+    process.env.GEMINI_API_KEY ? ({ source: "env" } as const) : describeSecret(SECRET_GEMINI).then((d) => ({ ...d, source: d.set ? ("saved" as const) : ("none" as const) })),
+    relaySource() ? ({ source: "env" } as const) : describeSecret(SECRET_RELAY).then((d) => ({ ...d, source: d.set ? ("saved" as const) : ("none" as const) })),
+  ]);
 
   return (
     <>
@@ -118,6 +125,22 @@ export default async function SettingsPage() {
               <h2 className="font-display text-xl font-semibold">Calls &amp; alerts</h2>
               <p className="text-sm text-muted">Voice and video calls ring on any device where you&apos;re signed in. Turn alerts on for each phone or computer you want to ring when the site is closed.</p>
               <AlertsSetting />
+            </section>
+
+            <section id="relay" className="card scroll-mt-20 p-5">
+              <h2 className="font-display text-xl font-semibold">Call relay</h2>
+              <p className="text-sm text-muted">
+                Some mobile networks block direct calls. A relay (TURN server) passes the call through when that happens, so calls connect everywhere. Metered and Cloudflare both have free plans. Shared by both of you.
+              </p>
+              <RelaySetting status={relay} />
+            </section>
+
+            <section id="ai" className="card scroll-mt-20 p-5">
+              <h2 className="font-display text-xl font-semibold">AI research</h2>
+              <p className="text-sm text-muted">
+                <Link href="/research" className="text-accent underline-offset-4 hover:underline">Research</Link> uses Google&apos;s Gemini to read real studies with you, teach you anything and quiz you. The key is shared by both of you, stored encrypted, and never shown again.
+              </p>
+              <AiKeySetting status={gemini} />
             </section>
 
             <section className="card p-5">

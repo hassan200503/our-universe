@@ -76,8 +76,9 @@ async function iceServers(): Promise<Ice> {
   if (iceCache && Date.now() - iceCache.at < 30 * 60_000) return iceCache.servers;
   try {
     const res = await fetch("/api/call/ice", { cache: "no-store" });
-    const { iceServers: servers } = (await res.json()) as { iceServers: Ice };
-    iceCache = { at: Date.now(), servers };
+    const { iceServers: servers, relay } = (await res.json()) as { iceServers: Ice; relay?: boolean };
+    // Relay credentials are worth reusing; without a relay, ask again next time so one saved in Settings is used at once.
+    iceCache = relay ? { at: Date.now(), servers } : null;
     return servers;
   } catch {
     return [{ urls: "stun:stun.l.google.com:19302" }];

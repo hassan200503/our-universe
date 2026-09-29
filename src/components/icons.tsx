@@ -222,6 +222,13 @@ export const IconSparkle = (p: P) => (
     <path d="M12 3.5c.6 4.2 2.3 6.4 6.5 8.5-4.2 2.1-5.9 4.3-6.5 8.5-.6-4.2-2.3-6.4-6.5-8.5 4.2-2.1 5.9-4.3 6.5-8.5Z" />
   </Svg>
 );
+/** Research: a flask with a spark of discovery. */
+export const IconFlask = (p: P) => (
+  <Svg {...p}>
+    <path d="M9.5 3.5h5M10.5 3.5v5.2L5.4 17.6A2 2 0 0 0 7.1 20.5h9.8a2 2 0 0 0 1.7-2.9l-5.1-8.9V3.5" />
+    <path d="M7.6 14.5h8.8" />
+  </Svg>
+);
 export const IconPlus = (p: P) => (
   <Svg {...p}>
     <path d="M12 5v14M5 12h14" />

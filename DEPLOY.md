@@ -9,17 +9,33 @@ Hosting: **Neon** (Postgres), **Vercel Hobby** (the website — free, no card, p
 3. Add one environment variable, `DATABASE_URL` (the Neon pooled string). Session cookies are signed with a key derived from it, so nothing else is required.
 4. Deploy. Every push to `main` redeploys automatically, and each build applies any new database migrations first (`npm run vercel-build`), so new features never run ahead of their tables.
 
-### Calls on mobile data (recommended, free)
+### Calls on mobile data (recommended, free, about 5 minutes)
 
-Calls connect directly between the two phones. On some mobile networks both ends sit behind strict NATs and need a relay (TURN) in the middle. Without one, calls still work on most Wi-Fi and many mobile networks; with one, they connect everywhere. Add **one** of these to the Vercel project's environment variables and redeploy:
+Calls connect directly between the two phones. On some mobile networks both ends sit behind strict NATs and need a relay (TURN) in the middle. Without one, calls still work on most Wi-Fi and many mobile networks; with one, they connect everywhere.
 
-| Provider (free tier) | Variables |
+**Easiest: in the app.** Create a free relay, then paste its two values in **Settings → Call relay** and press **Save relay**. The app checks them with the provider before saving, stores them encrypted, and **Test from this device** proves a relayed connection works from the phone you're holding. No redeploy needed; the next call uses it.
+
+| Provider (free tier) | Where to get it | The two values |
+| --- | --- | --- |
+| Metered / Open Relay | metered.ca → sign up → **TURN Server** → create an app | the app domain (e.g. `yourapp.metered.live`) and its API key |
+| Cloudflare Realtime TURN | dash.cloudflare.com → **Realtime** → **TURN Server** → Create | the Turn Token ID and API token |
+| Any TURN server | your own | `turn:`/`turns:` addresses, username, password |
+
+**Or as Vercel environment variables** (Project → Settings → Environment Variables, then redeploy). They take priority over the in-app setting:
+
+| Provider | Variables |
 | --- | --- |
-| Cloudflare Realtime TURN (dash.cloudflare.com → Realtime → TURN → Create key) | `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN` |
-| Metered / Open Relay (metered.ca → TURN server → create app) | `METERED_TURN_DOMAIN` (e.g. `yourapp.metered.live`), `METERED_TURN_API_KEY` |
+| Metered | `METERED_TURN_DOMAIN`, `METERED_TURN_API_KEY` |
+| Cloudflare | `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN` |
 | Any TURN server | `TURN_URLS` (comma-separated `turn:`/`turns:` URLs), `TURN_USERNAME`, `TURN_CREDENTIAL` |
 
 Credentials stay on the server; browsers get short-lived ones from `/api/call/ice`.
+
+### AI research (free Gemini key)
+
+**Research** (`/research`) uses Google's Gemini API. Create a free key at aistudio.google.com → **Get API key**, then either paste it once in **Settings → AI research** (checked with Google, stored encrypted, shared by both of you) or set `GEMINI_API_KEY` in Vercel and redeploy. Optional: `GEMINI_MODELS`, a comma-separated list of models to try in order (the defaults are current Flash models, with Flash-Lite as the fallback).
+
+On a free key, Google Search grounding may not be available and busy models sometimes answer "high demand". Research copes: studies come from OpenAlex (free, no key), each model is tried in turn, and every answer says what it was based on.
 
 ### Call alerts when the site is closed
 

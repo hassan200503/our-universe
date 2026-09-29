@@ -3,6 +3,20 @@
 import { useActionState, useEffect, useRef, useTransition } from "react";
 import type { ActionState } from "@/lib/actions/util";
 
+/**
+ * Submits a form to its action without React's automatic reset, so what was
+ * typed survives an error message. (`action` stays on the form too, so it
+ * still works before the page has hydrated.)
+ */
+export function useKeepTyped(run: (fd: FormData) => void) {
+  const [, start] = useTransition();
+  return (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+    start(() => run(fd));
+  };
+}
+
 /** A form bound to a server action, showing its error or success message and resetting on success. */
 export function ActionForm({
   action,
@@ -19,11 +33,12 @@ export function ActionForm({
 }) {
   const [state, run, pending] = useActionState(action, null);
   const ref = useRef<HTMLFormElement>(null);
+  const onSubmit = useKeepTyped(run);
   useEffect(() => {
     if (state?.ok && resetOnSuccess) ref.current?.reset();
   }, [state, resetOnSuccess]);
   return (
-    <form ref={ref} action={run} className={className}>
+    <form ref={ref} action={run} onSubmit={onSubmit} className={className}>
       {children}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button className="btn" disabled={pending}>
