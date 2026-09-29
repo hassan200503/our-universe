@@ -541,6 +541,9 @@ export const calls = pgTable(
     endedBy: uuid("ended_by"),
     callerSeenAt: timestamp("caller_seen_at", { withTimezone: true }).notNull().defaultNow(),
     calleeSeenAt: timestamp("callee_seen_at", { withTimezone: true }),
+    /** When the callee's phones were last alerted by push, so an unanswered call keeps ringing. */
+    pushedAt: timestamp("pushed_at", { withTimezone: true }),
+    pushCount: integer("push_count").notNull().default(0),
   },
   (t) => [
     uniqueIndex("calls_one_live").on(t.relationshipId).where(sql`status in ('calling', 'ringing', 'active')`),

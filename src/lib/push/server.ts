@@ -37,8 +37,8 @@ export function vapidKeys() {
 }
 
 export type PushPayload =
-  | { type: "message"; title: string; body: string; url: string; tag: string }
-  | { type: "call"; callId: string; kind: "audio" | "video"; title: string; body: string; url: string }
+  | { type: "message"; title: string; body: string; url: string; tag: string; unread?: number }
+  | { type: "call"; callId: string; kind: "audio" | "video"; title: string; body: string; url: string; token: string }
   | { type: "call-end"; callId: string; reason: "answered" | "missed" | "declined"; title: string; kind: "audio" | "video" };
 
 type Options = { ttl: number; urgency: "high" | "normal" };

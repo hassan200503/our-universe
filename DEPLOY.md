@@ -23,7 +23,7 @@ Credentials stay on the server; browsers get short-lived ones from `/api/call/ic
 
 ### Call alerts when the site is closed
 
-Nothing to configure: push keys are derived from `DATABASE_URL` (or `SESSION_SECRET`). Each of you turns alerts on per device in **Settings → Calls & alerts**. On an iPhone, first open the site in Safari → Share → **Add to Home Screen**, then turn alerts on from the Home Screen app.
+Nothing to configure: push keys are derived from `DATABASE_URL` (or `SESSION_SECRET`). After signing in on each phone or computer, tap **Turn on notifications** when asked (or later in **Settings → Calls & alerts**). From then on calls ring and messages pop up on that device even when the site is closed or you've signed out. On an iPhone, first open the site in Safari → Share → **Add to Home Screen**, then sign in from the Home Screen app and turn alerts on there.
 
 > Free-tier limits change. Before relying on them, re-check each provider's current pricing page: Neon's free plan, Netlify's free plan (function timeouts, build minutes), and GitHub Actions minutes for **private** repositories.
 

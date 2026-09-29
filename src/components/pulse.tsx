@@ -51,6 +51,12 @@ function Hearts() {
   );
 }
 
+/** Unread messages on the app icon (installed apps), like a phone's messenger. */
+function appBadge(n: number) {
+  const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+  (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
+}
+
 /** A soft two-note chime for a new message, made on the fly (no sound files to download). */
 function chime() {
   try {
@@ -134,6 +140,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
             if (fresh.length) setToasts((t) => [...t.filter((x) => !fresh.some((f) => f.id === x.id)), ...fresh].slice(-3));
             after.current = json.lastEventId;
             setData(json);
+            appBadge(json.chat?.unread ?? 0);
           }
         }
       } catch {

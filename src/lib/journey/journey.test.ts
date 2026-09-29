@@ -53,14 +53,16 @@ describe("verse rotation", () => {
 describe("journey clock", () => {
   const at = (iso: string) => Date.parse(iso);
   it("counts calendar years, months and days in Nairobi time", () => {
-    expect(journeyParts("2024-02-14", at("2026-09-29T07:30:05Z"))).toEqual({ y: 2, m: 7, d: 15, h: 10, min: 30, s: 5 });
+    expect(journeyParts("2026-02-14", at("2026-09-29T07:30:05Z"))).toEqual({ y: 0, m: 7, d: 15, h: 10, min: 30, s: 5 });
+    expect(journeyParts("2026-02-14", at("2028-09-29T07:30:05Z"))).toMatchObject({ y: 2, m: 7, d: 15 });
   });
   it("rolls over at Nairobi midnight, not UTC midnight", () => {
     // 21:30 UTC on the 13th is already 00:30 on the 14th in Nairobi: exactly one year.
-    expect(journeyParts("2024-02-14", at("2025-02-13T21:30:00Z"))).toMatchObject({ y: 1, m: 0, d: 0, h: 0, min: 30 });
+    expect(journeyParts("2026-02-14", at("2027-02-13T21:30:00Z"))).toMatchObject({ y: 1, m: 0, d: 0, h: 0, min: 30 });
   });
   it("borrows days from the previous month", () => {
-    expect(journeyParts("2024-01-31", at("2024-03-01T09:00:00Z"))).toMatchObject({ y: 0, m: 1, d: 1 });
+    expect(journeyParts("2028-01-31", at("2028-03-01T09:00:00Z"))).toMatchObject({ y: 0, m: 1, d: 1 }); // leap year: 31 Jan → 29 Feb
+    expect(journeyParts("2027-01-31", at("2027-03-01T09:00:00Z"))).toMatchObject({ y: 0, m: 1, d: 1 }); // 31 Jan → 28 Feb
   });
 });
 

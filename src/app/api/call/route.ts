@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCtx } from "@/lib/context";
-import { applyCall, callAction, syncCall } from "@/lib/calls/server";
+import { applyCall, callAction, declineWithToken, syncCall } from "@/lib/calls/server";
 
 const noStore = { "Cache-Control": "no-store" };
 
@@ -19,8 +19,15 @@ export async function GET(req: NextRequest) {
 /** POST /api/call {action: start|ringing|accept|decline|end|missed|failed|signal, …} */
 export async function POST(req: NextRequest) {
   const ctx = await getCtx();
-  if (!ctx) return NextResponse.json({ ok: false, error: "Sign in first" }, { status: 401 });
   const parsed = callAction.safeParse(await req.json().catch(() => null));
+  if (!ctx) {
+    // "Decline" on a call notification works even on a device that's signed out.
+    if (parsed.success && parsed.data.action === "decline" && parsed.data.token) {
+      const result = await declineWithToken(parsed.data.id, parsed.data.token);
+      return NextResponse.json(result, { status: result.ok ? 200 : 403, headers: noStore });
+    }
+    return NextResponse.json({ ok: false, error: "Sign in first" }, { status: 401 });
+  }
   if (!parsed.success) return NextResponse.json({ ok: false, error: "Invalid call action" }, { status: 400 });
   const result = await applyCall(ctx, parsed.data);
   return NextResponse.json(result, { status: result.ok ? 200 : 409, headers: noStore });

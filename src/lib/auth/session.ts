@@ -1,5 +1,5 @@
 import "server-only";
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
@@ -22,6 +22,17 @@ function secret(): Uint8Array {
 }
 
 export type Session = { personId: string; slug: string };
+
+/** A short signature for links that must work without a session (e.g. "Decline" on a call notification). */
+export function sign(value: string): string {
+  return createHmac("sha256", secret()).update(value).digest("base64url");
+}
+
+export function verifySignature(value: string, signature: string): boolean {
+  const a = Buffer.from(sign(value));
+  const b = Buffer.from(signature);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 export async function createSession(s: Session) {
   const token = await new SignJWT({ slug: s.slug })

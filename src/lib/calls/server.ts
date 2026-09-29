@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq, gt, inArray, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { after } from "next/server";
 import { z } from "zod";
-import type { Ctx } from "@/lib/context";
+import { ctxFor, type Ctx } from "@/lib/context";
+import { sign, verifySignature } from "@/lib/auth/session";
 import { getDb, withSchema } from "@/lib/db/client";
 import { callSignals, calls } from "@/lib/db/schema";
 import { logCall } from "@/lib/chat/server";
@@ -36,6 +37,29 @@ function view(ctx: Ctx, r: Row): CallView {
     endedBy: slug(r.endedBy),
   };
 }
+
+/** Lets "Decline" on a call notification work even on a device that's signed out. */
+const declineToken = (row: Pick<Row, "id" | "calleeId">) => sign(`call-decline:${row.id}:${row.calleeId}`);
+
+/**
+ * Rings the other person's phones through push. Sent when the call starts and
+ * again every few seconds while no open page has picked it up, so a phone in a
+ * pocket keeps ringing the way a real call does.
+ */
+function ringByPush(ctx: Ctx, row: Row) {
+  after(async () => {
+    const { pushTo } = await import("@/lib/push/server");
+    const first = ctx.members.find((m) => m.id === row.callerId)?.displayName.split(" ")[0] ?? "Our Universe";
+    const video = row.kind === "video";
+    await pushTo(
+      [row.calleeId],
+      { type: "call", callId: row.id, kind: video ? "video" : "audio", title: first, body: video ? "Incoming video call" : "Incoming voice call", url: `/together/chat?call=${row.id}`, token: declineToken(row) },
+      { ttl: 30, urgency: "high" },
+    ).catch(() => 0);
+  });
+}
+const REPUSH_MS = 7_000;
+const MAX_PUSHES = 6;
 
 const seconds = (from: Date | null, to: Date) => (from ? Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000)) : null);
 
@@ -121,7 +145,7 @@ export function currentCall(ctx: Ctx): Promise<CallView | null> {
 const signal = z.object({ kind: z.enum(["offer", "answer", "ice", "restart"]), payload: z.string().max(20_000) });
 export const callAction = z.discriminatedUnion("action", [
   z.object({ action: z.literal("start"), kind: z.enum(["audio", "video"]) }),
-  z.object({ action: z.enum(["ringing", "accept", "decline", "end", "missed", "failed"]), id: z.uuid() }),
+  z.object({ action: z.enum(["ringing", "accept", "decline", "end", "missed", "failed"]), id: z.uuid(), token: z.string().max(200).optional() }),
   z.object({ action: z.literal("signal"), id: z.uuid(), signals: z.array(signal).min(1).max(60) }),
 ]);
 export type CallAction = z.infer<typeof callAction>;
@@ -139,16 +163,11 @@ export function applyCall(ctx: Ctx, a: CallAction): Promise<CallResult> {
       let existing = await live(ctx);
       if (!existing) {
         try {
-          const [created] = await db.insert(calls).values({ relationshipId: ctx.relationship.id, callerId: ctx.me.id, calleeId: partner.id, kind: a.kind }).returning();
-          after(async () => {
-            const { pushTo } = await import("@/lib/push/server");
-            const first = ctx.me.displayName.split(" ")[0];
-            await pushTo(
-              [partner.id],
-              { type: "call", callId: created.id, kind: a.kind, title: first, body: a.kind === "video" ? "Incoming video call" : "Incoming voice call", url: `/together/chat?call=${created.id}` },
-              { ttl: 45, urgency: "high" },
-            ).catch(() => 0);
-          });
+          const [created] = await db
+            .insert(calls)
+            .values({ relationshipId: ctx.relationship.id, callerId: ctx.me.id, calleeId: partner.id, kind: a.kind, pushedAt: new Date(), pushCount: 1 })
+            .returning();
+          ringByPush(ctx, created);
           return { ok: true, call: view(ctx, created) };
         } catch {
           // Both of you pressed call in the same instant: the unique index let one through.
@@ -222,6 +241,15 @@ export function syncCall(ctx: Ctx, id: string, afterId: number): Promise<CallSyn
         .set(row.callerId === ctx.me.id ? { callerSeenAt: now } : { calleeSeenAt: now })
         .where(eq(calls.id, row.id));
       if (row.status !== "active" && now.getTime() - row.createdAt.getTime() > RING_MS + 15_000) await finish(ctx, row.id, ["calling", "ringing"], "missed", null);
+      // No open page has picked the call up yet: ring their phones again (at most once per interval, however many polls arrive).
+      if (row.status === "calling" && row.callerId === ctx.me.id && now.getTime() - row.createdAt.getTime() < RING_MS) {
+        const [due] = await db
+          .update(calls)
+          .set({ pushedAt: now, pushCount: sql`${calls.pushCount} + 1` })
+          .where(and(eq(calls.id, row.id), eq(calls.status, "calling"), lt(calls.pushCount, MAX_PUSHES), or(isNull(calls.pushedAt), lt(calls.pushedAt, new Date(now.getTime() - REPUSH_MS)))))
+          .returning();
+        if (due) ringByPush(ctx, due);
+      }
     }
     const signals = await db
       .select({ id: callSignals.id, kind: callSignals.kind, payload: callSignals.payload })
@@ -231,5 +259,18 @@ export function syncCall(ctx: Ctx, id: string, afterId: number): Promise<CallSyn
       .limit(200);
     const fresh = (await mine(ctx, row.id)) ?? row;
     return { serverNow: now.toISOString(), call: view(ctx, fresh), signals: signals.map((s) => ({ id: s.id, kind: s.kind as "offer", payload: s.payload })) };
+  });
+}
+
+/** "Decline" tapped on a notification on a signed-out device: allowed with the call's own signed token. */
+export async function declineWithToken(id: string, token: string): Promise<CallResult> {
+  return withSchema(async () => {
+    const db = await getDb();
+    const [row] = await db.select().from(calls).where(eq(calls.id, id));
+    if (!row || !verifySignature(`call-decline:${row.id}:${row.calleeId}`, token)) return { ok: false, error: "Not allowed" };
+    const ctx = await ctxFor(row.calleeId);
+    if (!ctx) return { ok: false, error: "Not allowed" };
+    await finish(ctx, row.id, ["calling", "ringing"], "declined", row.calleeId);
+    return { ok: true, call: null };
   });
 }

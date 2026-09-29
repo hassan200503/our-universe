@@ -5,7 +5,7 @@ import { Nav } from "@/components/nav";
 import { MeProvider } from "@/components/me-context";
 import { PulseProvider } from "@/components/pulse";
 import { CallProvider } from "@/components/call/call-provider";
-import { ServiceWorker } from "@/components/push";
+import { ReachPrompt, ServiceWorker } from "@/components/push";
 import { getCtx } from "@/lib/context";
 import "./globals.css";
 
@@ -47,6 +47,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                   <Nav />
                   <main className="flex-1 pb-28 sm:pb-0">{children}</main>
                   <ServiceWorker />
+                  {ctx.partners[0] && <ReachPrompt partnerName={ctx.partners[0].displayName.split(" ")[0]} />}
                 </CallProvider>
               </PulseProvider>
             ) : (

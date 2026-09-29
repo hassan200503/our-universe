@@ -51,7 +51,8 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
   }, [initial.serverNow]);
   const player = useRef<PlayerHandle>(null);
   useEffect(() => warmYouTube(), []);
-  const ready = useRef(false);
+  /** The track the player last said it's ready for; the sync loop steers only that track. */
+  const readyFor = useRef<string | null>(null);
   const lastSeek = useRef(0);
   const endedSent = useRef<string | null>(null);
   const blocked = useRef(false);
@@ -108,6 +109,12 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
 
   const send = useCallback(
     async (a: RoomAction) => {
+      // Choosing something to play is a tap: this device may play sound again.
+      if (a.type === "load" || a.type === "play" || a.type === "next") {
+        blocked.current = false;
+        setTapKey(null);
+      }
+      if (a.type === "load") endedSent.current = null;
       const t0 = Date.now();
       const res = await fetch(`/api/room?after=${after.current}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a) });
       if (res.ok) absorb(await res.json(), t0);
@@ -124,7 +131,6 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
   }, []);
 
   useEffect(() => {
-    ready.current = false;
     blocked.current = false;
   }, [key]);
   const needTap = tapKey !== null && tapKey === key;
@@ -133,12 +139,29 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
     const id = setInterval(async () => {
       const s = stateRef.current;
       const p = player.current;
-      if (!s || !p || !ready.current) return;
+      const current = s?.current?.id ?? s?.youtube?.id ?? null;
+      if (!s || !p || !current || readyFor.current !== current) return;
       const want = expected();
       const d = p.duration();
       setNow(p.time());
       setDur(d);
+      // The shared clock says this track is over (e.g. it finished while I was away): move everyone on
+      // rather than starting it. The server only advances once per track, however many phones report it.
+      if (s.playing && d > 0 && want >= d - 0.25) {
+        const k = s.current?.id ?? s.youtube?.id;
+        if (p.playing()) p.pause();
+        if (k && endedSent.current !== k) {
+          endedSent.current = k;
+          send({ type: "ended", key: k });
+        }
+        return;
+      }
       if (s.playing && !p.playing() && !blocked.current) {
+        // Start from where the other phone is right now, not from where this one stopped.
+        if (Math.abs(p.time() - want) > 0.25 && (!d || want < d - 0.5)) {
+          p.seek(Math.max(0, want));
+          lastSeek.current = Date.now();
+        }
         if (!(await p.play())) {
           blocked.current = true;
           setTapKey(stateRef.current?.current?.id ?? stateRef.current?.youtube?.id ?? null);
@@ -146,21 +169,15 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
       } else if (!s.playing && p.playing()) {
         p.pause();
       }
-      // The shared clock says this track is over (e.g. it finished while I was away): move everyone on.
-      // The server only advances once per track, however many phones report it.
-      if (s.playing && d > 0 && want >= d - 0.25) {
-        const k = s.current?.id ?? s.youtube?.id;
-        if (k && endedSent.current !== k) {
-          endedSent.current = k;
-          send({ type: "ended", key: k });
-        }
-        return;
-      }
       const drift = p.time() - want;
       const tolerance = s.playing ? 1.2 : 0.35;
       if (Math.abs(drift) > tolerance && (!d || want < d - 0.5) && Date.now() - lastSeek.current > 2000) {
         lastSeek.current = Date.now();
         p.seek(Math.max(0, want));
+        p.setRate?.(1);
+      } else if (s.playing) {
+        // Small gaps close by playing a touch faster or slower (pitch is kept), with no audible jump.
+        p.setRate?.(Math.abs(drift) > 0.08 ? 1 - Math.max(-0.08, Math.min(0.08, drift * 0.12)) : 1);
       }
       setInSync(Math.abs(drift) <= tolerance + 0.3);
     }, 500);
@@ -255,11 +272,11 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
         <div data-world="us" className="relative mt-4 overflow-hidden rounded-3xl bg-black shadow-2xl">
           <div className={`relative ${isAudio || !key ? "aspect-[16/9] sm:aspect-[21/9]" : "aspect-video"}`}>
             {key && ytId && (
-              <YouTubePlayer ref={player} videoId={ytId} audioOnly={isAudio} playing={state?.playing} startAt={expected} onReady={() => (ready.current = true)} onEnded={() => send({ type: "ended", key: key! })} />
+              <YouTubePlayer ref={player} videoId={ytId} audioOnly={isAudio} playing={state?.playing} startAt={expected} onReady={() => (readyFor.current = key)} onEnded={() => send({ type: "ended", key: key! })} />
             )}
             {nextUp?.url && !nextUp.youtubeId && nextUp.id !== key && <Prefetch key={nextUp.id} src={nextUp.url} kind={nextUp.kind === "song" ? "song" : "video"} />}
             {key && fileSrc && (
-              <FilePlayer key={key} ref={player} src={fileSrc} kind={isAudio ? "song" : "video"} poster={state?.current?.thumbUrl} onReady={() => (ready.current = true)} onEnded={() => send({ type: "ended", key: key! })} />
+              <FilePlayer key={key} ref={player} src={fileSrc} kind={isAudio ? "song" : "video"} poster={state?.current?.thumbUrl} onReady={() => (readyFor.current = key)} onEnded={() => send({ type: "ended", key: key! })} />
             )}
             {(isAudio || !key) && (
               <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-accent via-rose-900 to-accent-2 p-6 text-center text-white">

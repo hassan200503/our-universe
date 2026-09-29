@@ -255,10 +255,19 @@ async function notifyPartner(ctx: Ctx, m: ChatMessage) {
   if (!partner) return;
   try {
     const db = await getDb();
-    const [p] = await db.select().from(presence).where(eq(presence.personId, partner.id));
+    const [[p], [state]] = await Promise.all([
+      db.select().from(presence).where(eq(presence.personId, partner.id)),
+      db.select().from(chatState).where(eq(chatState.personId, partner.id)),
+    ]);
     if (p && p.place === "chat" && Date.now() - p.lastSeenAt.getTime() < 15_000) return;
+    // How many of my messages they haven't read yet: the notification title and their app-icon badge.
+    const [{ n }] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(and(eq(messages.relationshipId, ctx.relationship.id), eq(messages.senderId, ctx.me.id), gt(messages.id, state?.lastReadId ?? 0), sql`${messages.deletedAt} is null`, notHiddenFor(partner.id)));
+    const first = ctx.me.displayName.split(" ")[0];
     const { pushTo } = await import("@/lib/push/server");
-    await pushTo([partner.id], { type: "message", title: ctx.me.displayName.split(" ")[0], body: m.body.slice(0, 180), url: "/together/chat", tag: "chat" });
+    await pushTo([partner.id], { type: "message", title: n > 1 ? `${first} · ${n} new messages` : first, body: m.body.slice(0, 180), url: "/together/chat", tag: "chat", unread: n });
   } catch {
     /* notifications are best-effort */
   }

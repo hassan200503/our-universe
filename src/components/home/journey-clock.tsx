@@ -36,19 +36,22 @@ export function JourneyClock({ startedOn, serverNow }: { startedOn: string; serv
     };
   }, []);
   const p = journeyParts(startedOn, now);
-  const cells: [string, string][] = [
+  // Early in the journey there are no years (or months) to count yet: start from the first unit that has one.
+  const date: [string, string][] = [
     [String(p.y), p.y === 1 ? "Year" : "Years"],
     [String(p.m), p.m === 1 ? "Month" : "Months"],
     [String(p.d), p.d === 1 ? "Day" : "Days"],
-    [pad(p.h), "Hours"],
-    [pad(p.min), "Minutes"],
-    [pad(p.s), "Seconds"],
-  ];
+  ].slice(p.y > 0 ? 0 : p.m > 0 ? 1 : 2) as [string, string][];
+  const cells: [string, string][] = [...date, [pad(p.h), "Hours"], [pad(p.min), "Minutes"], [pad(p.s), "Seconds"]];
+  const parts = [p.y && `${p.y} year${p.y === 1 ? "" : "s"}`, (p.y || p.m) && `${p.m} month${p.m === 1 ? "" : "s"}`, `${p.d} day${p.d === 1 ? "" : "s"}`].filter(Boolean);
   return (
-    <dl className="grid grid-cols-3 gap-y-6 sm:grid-cols-6" aria-label={`Walking together for ${p.y} years, ${p.m} months and ${p.d} days`}>
+    <dl className="flex flex-wrap justify-center gap-y-6" aria-label={`Walking together for ${parts.join(", ")}`}>
       {cells.map(([v, label], i) => (
-        <div key={label} className={`relative px-2 text-center ${i % 3 !== 0 ? "border-l border-white/10" : ""} ${i === 3 ? "sm:border-l sm:border-[#f0dcae]/25" : ""}`}>
-          <dd className={`num-lux text-[2.6rem] text-[#f7efe1] sm:text-[3.4rem] ${i >= 3 ? "text-[#e9d3a4]/90" : ""}`} suppressHydrationWarning>
+        <div
+          key={label}
+          className={`relative basis-1/3 px-2 text-center sm:flex-1 sm:basis-0 ${i % 3 !== 0 ? "border-l border-white/10" : ""} ${i > 0 && i % 3 === 0 ? "sm:border-l sm:border-white/10" : ""} ${i === date.length ? "sm:!border-[#f0dcae]/25" : ""}`}
+        >
+          <dd className={`num-lux text-[2.6rem] sm:text-[3.4rem] ${i >= date.length ? "text-[#e9d3a4]/90" : "text-[#f7efe1]"}`} suppressHydrationWarning>
             {v}
           </dd>
           <dt className="mt-2 text-[0.6rem] font-medium uppercase tracking-[0.3em] text-white/45">{label}</dt>

@@ -12,6 +12,8 @@ export type PlayerHandle = {
   duration: () => number;
   playing: () => boolean;
   setVolume: (v: number) => void;
+  /** Fine speed control for keeping two phones in step (files only; YouTube steps are too coarse). */
+  setRate?: (r: number) => void;
 };
 
 // ─── YouTube IFrame API ────────────────────────────────────────────────────
@@ -89,7 +91,8 @@ export const YouTubePlayer = forwardRef<PlayerHandle, { videoId: string; onEnded
       const el = document.createElement("div");
       host.current.appendChild(el);
       player.current = new YT.Player(el, {
-        videoId,
+        // The latest video, in case it changed while YouTube's script was still loading.
+        videoId: current.current,
         host: "https://www.youtube-nocookie.com",
         playerVars: { controls: 0, rel: 0, modestbranding: 1, playsinline: 1, disablekb: 1, iv_load_policy: 3, fs: 0, start: Math.floor(startFrom.current?.() ?? 0) },
         events: {
@@ -109,8 +112,7 @@ export const YouTubePlayer = forwardRef<PlayerHandle, { videoId: string; onEnded
       player.current = null;
       ready.current = false;
     };
-    // The player is created once; later videos are swapped in with cueVideoById.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // The player is created once; later videos are swapped in (see below).
   }, []);
 
   useEffect(() => {
@@ -121,6 +123,8 @@ export const YouTubePlayer = forwardRef<PlayerHandle, { videoId: string; onEnded
     const startSeconds = Math.max(0, startFrom.current?.() ?? 0);
     if (shouldPlay.current) player.current?.loadVideoById({ videoId, startSeconds });
     else player.current?.cueVideoById({ videoId, startSeconds });
+    // The same player now holds the new video: tell the room it can steer this one.
+    readyCb.current();
   }, [videoId]);
 
   useImperativeHandle(ref, () => ({
@@ -155,6 +159,18 @@ export const FilePlayer = forwardRef<PlayerHandle, { src: string; kind: "video" 
   // and only switch (at the same second) if it expires.
   const [active, setActive] = useState(src);
   const resumeAt = useRef<number | null>(null);
+  const readyCb = useRef(onReady);
+  useEffect(() => {
+    readyCb.current = onReady;
+  });
+  // The page is rendered on the server, so a cached file can finish loading before React is
+  // listening: if it already has its metadata when we take over, it's ready now.
+  useEffect(() => {
+    if ((el.current?.readyState ?? 0) >= 1) {
+      readyCb.current();
+      force((x) => x + 1);
+    }
+  }, []);
   try {
     preconnect(new URL(src, "https://x").origin);
   } catch {
@@ -165,8 +181,9 @@ export const FilePlayer = forwardRef<PlayerHandle, { src: string; kind: "video" 
       try {
         await el.current?.play();
         return true;
-      } catch {
-        return false;
+      } catch (e) {
+        // Only the browser's autoplay rule needs a tap; a start interrupted by a pause or a new source doesn't.
+        return (e as { name?: string })?.name !== "NotAllowedError";
       }
     },
     pause: () => el.current?.pause(),
@@ -178,6 +195,9 @@ export const FilePlayer = forwardRef<PlayerHandle, { src: string; kind: "video" 
     playing: () => !!el.current && !el.current.paused,
     setVolume: (v) => {
       if (el.current) el.current.volume = v;
+    },
+    setRate: (r) => {
+      if (el.current && Math.abs(el.current.playbackRate - r) > 0.001) el.current.playbackRate = r;
     },
   }));
   const common = {
@@ -196,7 +216,7 @@ export const FilePlayer = forwardRef<PlayerHandle, { src: string; kind: "video" 
         el.current.currentTime = resumeAt.current;
         resumeAt.current = null;
       }
-      onReady();
+      readyCb.current();
       force((x) => x + 1);
     },
   };
