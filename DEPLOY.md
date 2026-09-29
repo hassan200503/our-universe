@@ -31,6 +31,8 @@ Calls connect directly between the two phones. On some mobile networks both ends
 
 Credentials stay on the server; browsers get short-lived ones from `/api/call/ice`.
 
+Until you add your own, calls fall back to Metered's free public relay (Open Relay). It's shared and best-effort, so it may be busy or unavailable; your own free relay is what makes calls reliable. Set `TURN_PUBLIC_FALLBACK=off` to disable the fallback. When a call can't connect, the call screen says why (for example, that the networks need a relay), and **Settings → Call relay → Test from this device** shows what the phone can reach.
+
 ### AI research (free Gemini key)
 
 **Research** (`/research`) uses Google's Gemini API. Create a free key at aistudio.google.com → **Get API key**, then either paste it once in **Settings → AI research** (checked with Google, stored encrypted, shared by both of you) or set `GEMINI_API_KEY` in Vercel and redeploy. Optional: `GEMINI_MODELS`, a comma-separated list of models to try in order (the defaults are current Flash models, with Flash-Lite as the fallback).

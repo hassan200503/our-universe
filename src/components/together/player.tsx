@@ -11,6 +11,10 @@ export type PlayerHandle = {
   time: () => number;
   duration: () => number;
   playing: () => boolean;
+  /** Waiting for data (network or a seek): its clock isn't moving, so it can't be judged for drift. */
+  buffering: () => boolean;
+  /** Whether second `t` is already downloaded, so jumping there won't stall (files only). */
+  has?: (t: number) => boolean;
   setVolume: (v: number) => void;
   /** Fine speed control for keeping two phones in step (files only; YouTube steps are too coarse). */
   setRate?: (r: number) => void;
@@ -131,10 +135,14 @@ export const YouTubePlayer = forwardRef<PlayerHandle, { videoId: string; onEnded
     play: async () => {
       if (!ready.current || !player.current) return false;
       player.current.playVideo();
-      // Autoplay may be blocked; report whether playback actually started.
-      await new Promise((r) => setTimeout(r, 600));
-      const s = player.current?.getPlayerState();
-      return s === 1 || s === 3;
+      // Autoplay may be blocked; report whether playback actually started. A slow network can
+      // take a while to reach "buffering", so only a player still idle after ~3 s counts as blocked.
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        const s = player.current?.getPlayerState();
+        if (s === 1 || s === 3) return true;
+      }
+      return false;
     },
     pause: () => player.current?.pauseVideo(),
     seek: (t) => player.current?.seekTo(t, true),
@@ -144,6 +152,7 @@ export const YouTubePlayer = forwardRef<PlayerHandle, { videoId: string; onEnded
       const s = player.current?.getPlayerState();
       return s === 1 || s === 3;
     },
+    buffering: () => player.current?.getPlayerState() === 3,
     setVolume: (v) => player.current?.setVolume(Math.round(v * 100)),
   }));
 
@@ -193,6 +202,13 @@ export const FilePlayer = forwardRef<PlayerHandle, { src: string; kind: "video" 
     time: () => el.current?.currentTime ?? 0,
     duration: () => (el.current && Number.isFinite(el.current.duration) ? el.current.duration : 0),
     playing: () => !!el.current && !el.current.paused,
+    buffering: () => !!el.current && (el.current.seeking || el.current.readyState < 3),
+    has: (t) => {
+      const b = el.current?.buffered;
+      if (!b) return false;
+      for (let i = 0; i < b.length; i++) if (t >= b.start(i) && t + 2 <= b.end(i)) return true;
+      return false;
+    },
     setVolume: (v) => {
       if (el.current) el.current.volume = v;
     },

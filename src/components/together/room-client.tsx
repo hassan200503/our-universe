@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { RoomAction, RoomPayload } from "@/lib/together/room";
+import { useEffect, useState, useTransition } from "react";
+import type { RoomPayload } from "@/lib/together/room";
 import type { MediaCard } from "@/lib/media/queries";
 import type { FeedPage } from "@/lib/trends/query";
 import { sendNudge } from "@/lib/actions/together";
@@ -14,10 +14,8 @@ import { IconHeadphones, IconMessage, IconNext, IconPause, IconPlay } from "@/co
 import { useMe, useMembers } from "@/components/me-context";
 import { usePulse } from "@/components/pulse";
 import { ago } from "@/lib/ui/time";
-import { FilePlayer, type PlayerHandle, Prefetch, warmYouTube, YouTubePlayer } from "./player";
+import { useRoom } from "./room-provider";
 
-type State = NonNullable<RoomPayload["state"]>;
-type Ev = RoomPayload["events"][number];
 
 const fmt = (s: number) => (Number.isFinite(s) && s > 0 ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}` : "0:00");
 const REACTIONS = ["❤️", "😂", "😍", "🔥", "😮", "👏", "🥹", "💃"] as const;
@@ -25,203 +23,21 @@ const REACTIONS = ["❤️", "😂", "😍", "🔥", "😮", "👏", "🥹", "�
 export function RoomClient({ initial }: { initial: RoomPayload }) {
   const me = useMe();
   const members = useMembers();
-  const [state, setState] = useState<State | undefined>(initial.state);
-  const [events, setEvents] = useState<Ev[]>(initial.events);
-  const [partners, setPartners] = useState(initial.partners);
-  // The track for which autoplay was blocked on this device (needs one tap).
-  const [tapKey, setTapKey] = useState<string | null>(null);
-  const [now, setNow] = useState(0);
-  const [dur, setDur] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [floaters, setFloaters] = useState<{ id: number; emoji: string; x: number }[]>([]);
+  const { stage, ...room } = useRoom()!;
   const [link, setLink] = useState("");
   const pulse = usePulse();
-  const [inSync, setInSync] = useState(true);
   const [, startNudge] = useTransition();
 
-  const version = useRef(initial.version);
-  const after = useRef(initial.events.at(-1)?.id ?? 0);
-  const offset = useRef(0);
-  const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-  useEffect(() => {
-    offset.current = Date.parse(initial.serverNow) - Date.now();
-  }, [initial.serverNow]);
-  const player = useRef<PlayerHandle>(null);
-  useEffect(() => warmYouTube(), []);
-  /** The track the player last said it's ready for; the sync loop steers only that track. */
-  const readyFor = useRef<string | null>(null);
-  const lastSeek = useRef(0);
-  const endedSent = useRef<string | null>(null);
-  const blocked = useRef(false);
-  const shown = useRef(new Set(initial.events.map((e) => e.id)));
-
-  const key = state?.current?.id ?? state?.youtube?.id ?? null;
-  const ytId = state?.current?.youtubeId ?? state?.youtube?.id ?? null;
-  const fileSrc = !ytId && state?.current?.url ? state.current.url : null;
-  const title = state?.current?.title ?? state?.youtube?.title ?? (state?.current ? (state.current.kind === "song" ? "A song" : "A video") : null);
-  const isAudio = state?.current?.kind === "song";
-
-  const absorb = useCallback((p: RoomPayload, t0: number) => {
-    const t1 = Date.now();
-    offset.current = Date.parse(p.serverNow) - (t0 + t1) / 2;
-    if (p.state) {
-      version.current = p.version;
-      setState(p.state);
-    }
-    setPartners(p.partners);
-    const fresh = p.events.filter((e) => !shown.current.has(e.id));
-    if (fresh.length) {
-      fresh.forEach((e) => shown.current.add(e.id));
-      after.current = Math.max(after.current, ...fresh.map((e) => e.id));
-      setEvents((es) => [...es, ...fresh].slice(-80));
-      const reacts = fresh.filter((e) => e.kind === "react");
-      if (reacts.length) setFloaters((f) => [...f, ...reacts.map((e) => ({ id: e.id, emoji: e.body, x: 10 + Math.random() * 80 }))].slice(-20));
-    }
-  }, []);
-
-  // ── Polling: ~1 s when you're both here, slower when alone, paused in the background.
+  // The player itself lives in the layout (so chat, calls and other pages never stop it); this page
+  // hands it the server's first read and marks the box the picture should fill.
+  const { activate } = room;
+  useEffect(() => activate(initial), [activate, initial]);
+  const live = room.active;
+  const state = live ? room.state : initial.state;
+  const events = live ? room.events : initial.events;
+  const partners = live ? room.partners : initial.partners;
+  const { key, title, isAudio, ytId, now, dur, volume, inSync, send, togglePlay, seekTo } = room;
   const partnerHere = partners.some((p) => p.here);
-  useEffect(() => {
-    let stop = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = async () => {
-      if (stop) return;
-      if (document.visibilityState === "visible") {
-        const t0 = Date.now();
-        try {
-          const res = await fetch(`/api/room?v=${version.current}&after=${after.current}`, { cache: "no-store" });
-          if (res.ok) absorb(await res.json(), t0);
-        } catch {
-          /* transient; keep going */
-        }
-      }
-      timer = setTimeout(tick, partnerHere ? 1000 : 2500);
-    };
-    timer = setTimeout(tick, 400);
-    return () => {
-      stop = true;
-      clearTimeout(timer);
-    };
-  }, [absorb, partnerHere]);
-
-  const send = useCallback(
-    async (a: RoomAction) => {
-      // Choosing something to play is a tap: this device may play sound again.
-      if (a.type === "load" || a.type === "play" || a.type === "next") {
-        blocked.current = false;
-        setTapKey(null);
-      }
-      if (a.type === "load") endedSent.current = null;
-      const t0 = Date.now();
-      const res = await fetch(`/api/room?after=${after.current}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a) });
-      if (res.ok) absorb(await res.json(), t0);
-    },
-    [absorb],
-  );
-
-  // ── Keep my player where the shared state says it should be.
-  const expected = useCallback(() => {
-    const s = stateRef.current;
-    if (!s) return 0;
-    if (!s.playing) return s.position;
-    return s.position + (Date.now() + offset.current - Date.parse(s.updatedAt)) / 1000;
-  }, []);
-
-  useEffect(() => {
-    blocked.current = false;
-  }, [key]);
-  const needTap = tapKey !== null && tapKey === key;
-
-  useEffect(() => {
-    const id = setInterval(async () => {
-      const s = stateRef.current;
-      const p = player.current;
-      const current = s?.current?.id ?? s?.youtube?.id ?? null;
-      if (!s || !p || !current || readyFor.current !== current) return;
-      const want = expected();
-      const d = p.duration();
-      setNow(p.time());
-      setDur(d);
-      // The shared clock says this track is over (e.g. it finished while I was away): move everyone on
-      // rather than starting it. The server only advances once per track, however many phones report it.
-      if (s.playing && d > 0 && want >= d - 0.25) {
-        const k = s.current?.id ?? s.youtube?.id;
-        if (p.playing()) p.pause();
-        if (k && endedSent.current !== k) {
-          endedSent.current = k;
-          send({ type: "ended", key: k });
-        }
-        return;
-      }
-      if (s.playing && !p.playing() && !blocked.current) {
-        // Start from where the other phone is right now, not from where this one stopped.
-        if (Math.abs(p.time() - want) > 0.25 && (!d || want < d - 0.5)) {
-          p.seek(Math.max(0, want));
-          lastSeek.current = Date.now();
-        }
-        if (!(await p.play())) {
-          blocked.current = true;
-          setTapKey(stateRef.current?.current?.id ?? stateRef.current?.youtube?.id ?? null);
-        }
-      } else if (!s.playing && p.playing()) {
-        p.pause();
-      }
-      const drift = p.time() - want;
-      const tolerance = s.playing ? 1.2 : 0.35;
-      if (Math.abs(drift) > tolerance && (!d || want < d - 0.5) && Date.now() - lastSeek.current > 2000) {
-        lastSeek.current = Date.now();
-        p.seek(Math.max(0, want));
-        p.setRate?.(1);
-      } else if (s.playing) {
-        // Small gaps close by playing a touch faster or slower (pitch is kept), with no audible jump.
-        p.setRate?.(Math.abs(drift) > 0.08 ? 1 - Math.max(-0.08, Math.min(0.08, drift * 0.12)) : 1);
-      }
-      setInSync(Math.abs(drift) <= tolerance + 0.3);
-    }, 500);
-    return () => clearInterval(id);
-  }, [expected, send]);
-
-  useEffect(() => {
-    player.current?.setVolume(volume);
-  }, [volume, key]);
-
-  // ── My controls (optimistic, then confirmed by the server).
-  function optimistic(patch: Partial<State>) {
-    setState((s) => (s ? { ...s, ...patch, updatedAt: new Date(Date.now() + offset.current).toISOString() } : s));
-  }
-  async function togglePlay() {
-    const p = player.current;
-    const pos = p?.time() ?? expected();
-    if (state?.playing) {
-      p?.pause();
-      optimistic({ playing: false, position: pos });
-      await send({ type: "pause", position: pos });
-    } else {
-      blocked.current = false;
-      setTapKey(null);
-      await p?.play();
-      optimistic({ playing: true, position: pos });
-      await send({ type: "play", position: pos });
-    }
-  }
-  async function seekTo(t: number) {
-    player.current?.seek(t);
-    lastSeek.current = Date.now();
-    optimistic({ position: t });
-    await send({ type: "seek", position: t });
-  }
-  async function join() {
-    blocked.current = false;
-    const ok = await player.current?.play();
-    if (ok) {
-      setTapKey(null);
-      player.current?.seek(expected());
-    }
-  }
-
   const nameOf = (slug: string) => members.find((m) => m.slug === slug)?.displayName.split(" ")[0] ?? "";
   const partner = members.find((m) => m.id !== me.id);
   const pState = partners.find((p) => p.slug === partner?.slug);
@@ -243,8 +59,7 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
   });
 
   // What just happened in the room ("Whitney started playing …"); messages live in the chat.
-  const activity = useMemo(() => events.filter((e) => e.kind === "system").slice(-3).reverse(), [events]);
-  const nextUp = state?.queue[0];
+  const activity = events.filter((e) => e.kind === "system").slice(-3).reverse();
   const unread = pulse.data?.chat?.unread ?? 0;
 
   return (
@@ -270,14 +85,7 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
 
         {/* Stage */}
         <div data-world="us" className="relative mt-4 overflow-hidden rounded-3xl bg-black shadow-2xl">
-          <div className={`relative ${isAudio || !key ? "aspect-[16/9] sm:aspect-[21/9]" : "aspect-video"}`}>
-            {key && ytId && (
-              <YouTubePlayer ref={player} videoId={ytId} audioOnly={isAudio} playing={state?.playing} startAt={expected} onReady={() => (readyFor.current = key)} onEnded={() => send({ type: "ended", key: key! })} />
-            )}
-            {nextUp?.url && !nextUp.youtubeId && nextUp.id !== key && <Prefetch key={nextUp.id} src={nextUp.url} kind={nextUp.kind === "song" ? "song" : "video"} />}
-            {key && fileSrc && (
-              <FilePlayer key={key} ref={player} src={fileSrc} kind={isAudio ? "song" : "video"} poster={state?.current?.thumbUrl} onReady={() => (readyFor.current = key)} onEnded={() => send({ type: "ended", key: key! })} />
-            )}
+          <div ref={stage} className={`relative ${isAudio || !key ? "aspect-[16/9] sm:aspect-[21/9]" : "aspect-video"}`}>
             {(isAudio || !key) && (
               <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-accent via-rose-900 to-accent-2 p-6 text-center text-white">
                 {key ? (
@@ -299,21 +107,6 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
                 )}
               </div>
             )}
-            {needTap && (
-              <button onClick={join} className="absolute inset-0 z-10 grid place-items-center bg-black/60 text-white backdrop-blur-sm">
-                <span className="rounded-full bg-white px-6 py-3 text-lg font-semibold text-black shadow-2xl">▶ Tap to join {state?.updatedBy && state.updatedBy !== me.slug ? nameOf(state.updatedBy) : ""}</span>
-              </button>
-            )}
-            {floaters.map((f) => (
-              <span
-                key={f.id}
-                className="pointer-events-none absolute bottom-4 text-4xl motion-reduce:hidden"
-                style={{ left: `${f.x}%`, animation: "float-up 3s ease-out forwards" }}
-                onAnimationEnd={() => setFloaters((x) => x.filter((y) => y.id !== f.id))}
-              >
-                {f.emoji}
-              </span>
-            ))}
           </div>
 
           {/* Controls */}
@@ -329,7 +122,7 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
                 max={dur || 1}
                 step={0.5}
                 value={Math.min(now, dur || 1)}
-                onChange={(e) => setNow(Number(e.target.value))}
+                onChange={(e) => room.setScrub(Number(e.target.value))}
                 onMouseUp={(e) => seekTo(Number((e.target as HTMLInputElement).value))}
                 onTouchEnd={(e) => seekTo(Number((e.target as HTMLInputElement).value))}
                 onKeyUp={(e) => seekTo(Number((e.target as HTMLInputElement).value))}
@@ -340,7 +133,7 @@ export function RoomClient({ initial }: { initial: RoomPayload }) {
               <button onClick={() => send({ type: "next" })} className="grid size-9 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white" aria-label="Next in queue" title="Next">
                 <IconNext size={18} />
               </button>
-              <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVolume(Number(e.target.value))} className="w-20 accent-pink-400" aria-label="My volume (only for me)" />
+              <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => room.setVolume(Number(e.target.value))} className="w-20 accent-pink-400" aria-label="My volume (only for me)" />
               <span className={`text-xs ${inSync ? "text-emerald-400" : "text-amber-300"}`}>{inSync ? (partnerHere ? `● In sync with ${partner?.displayName.split(" ")[0]}` : "● Ready") : "● Syncing…"}</span>
             </div>
           )}
