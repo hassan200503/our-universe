@@ -43,6 +43,8 @@ export type Snapshot = {
   /** The browser refused to start the other side's audio until a tap. */
   audioBlocked: boolean;
   relayed: boolean;
+  /** While a call is connecting: what each phone has found so far, so a stuck call can be explained. */
+  route: string | null;
 };
 
 const initial: Snapshot = {
@@ -64,6 +66,7 @@ const initial: Snapshot = {
   notice: null,
   audioBlocked: false,
   relayed: false,
+  route: null,
 };
 
 const RING_TIMEOUT = 45_000;
@@ -71,17 +74,19 @@ const CONNECT_TIMEOUT = 35_000;
 const RECONNECT_GIVE_UP = 25_000;
 
 type Ice = RTCIceServer[];
-let iceCache: { at: number; servers: Ice } | null = null;
-async function iceServers(): Promise<Ice> {
-  if (iceCache && Date.now() - iceCache.at < 30 * 60_000) return iceCache.servers;
+let iceCache: { at: number; servers: Ice; source: string } | null = null;
+const STUN_ONLY: Ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] }];
+async function iceServers(): Promise<{ servers: Ice; source: string }> {
+  if (iceCache && Date.now() - iceCache.at < 30 * 60_000) return iceCache;
   try {
-    const res = await fetch("/api/call/ice", { cache: "no-store" });
-    const { iceServers: servers, source } = (await res.json()) as { iceServers: Ice; source?: string };
+    // Never let a slow server hold up a call: after 5 s, go with direct routes only.
+    const res = await fetch("/api/call/ice", { cache: "no-store", signal: AbortSignal.timeout(5000) });
+    const { iceServers: servers, source = "none" } = (await res.json()) as { iceServers: Ice; source?: string };
     // Your own relay's credentials are worth reusing; otherwise ask again next time, so one saved in Settings is used at once.
-    iceCache = source === "own" ? { at: Date.now(), servers } : null;
-    return servers;
+    iceCache = source === "own" ? { at: Date.now(), servers, source } : null;
+    return { servers, source };
   } catch {
-    return [{ urls: "stun:stun.l.google.com:19302" }];
+    return { servers: STUN_ONLY, source: "unavailable" };
   }
 }
 
@@ -117,6 +122,7 @@ export class CallEngine {
   /** Candidate types seen on each side (host, srflx, relay), to explain a call that can't connect. */
   private candTypes = { mine: new Set<string>(), theirs: new Set<string>() };
   private hasRelay = false;
+  private relaySource = "none";
   private outgoingIce: RTCIceCandidateInit[] = [];
   private iceFlush: ReturnType<typeof setTimeout> | null = null;
   private bufferedOffer: string | null = null;
@@ -251,11 +257,11 @@ export class CallEngine {
     }
     this.accepted = true;
     this.set({ phase: "connecting", call: r.call ?? call });
+    this.connectDeadline();
     await this.createPeer(local, false);
     if (epoch !== this.epoch) return;
     this.afterSignal = 0;
     this.startPolling(true);
-    this.connectDeadline();
   }
 
   decline() {
@@ -436,10 +442,19 @@ export class CallEngine {
    * channels) is added in one synchronous run, so the caller negotiates once.
    */
   private async createPeer(local: MediaStream, caller: boolean) {
-    const servers = await iceServers();
+    const { servers, source } = await iceServers();
+    this.relaySource = source;
     this.hasRelay = servers.some((x) => (Array.isArray(x.urls) ? x.urls : [x.urls]).some((u) => /^turns?:/.test(u)));
     this.candTypes = { mine: new Set(), theirs: new Set() };
-    const pc = new RTCPeerConnection({ iceServers: servers, bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
+    let pc: RTCPeerConnection;
+    try {
+      pc = new RTCPeerConnection({ iceServers: servers, bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
+    } catch {
+      // A relay address this browser won't accept mustn't stop the call: go with direct routes.
+      this.hasRelay = false;
+      this.relaySource = "rejected";
+      pc = new RTCPeerConnection({ iceServers: STUN_ONLY, bundlePolicy: "max-bundle", rtcpMuxPolicy: "require" });
+    }
     this.pc = pc;
     const remote = new MediaStream();
     this.set({ remote, remoteVideoLive: false });
@@ -618,7 +633,20 @@ export class CallEngine {
     return "Couldn't connect the call. Try again, or switch one phone to Wi-Fi.";
   }
 
+  private describeRoute(): string {
+    const list = (x: Set<string>) => (x.size ? [...x].sort().join(" ") : "nothing yet");
+    const relay = { own: "your relay", public: "public relay", none: "no relay", unavailable: "relay settings unreachable", rejected: "relay refused by browser" }[this.relaySource] ?? this.relaySource;
+    return `This phone: ${list(this.candTypes.mine)} · Other phone: ${list(this.candTypes.theirs)} · ${relay} · ${this.pc?.iceConnectionState ?? "starting"}`;
+  }
+
   private connectDeadline() {
+    // After a few seconds without a connection, show what each side has found (and keep it current).
+    const tick = () => {
+      if (this.s.phase !== "connecting") return this.s.route && this.set({ route: null });
+      this.set({ route: this.describeRoute() });
+      this.later(tick, 1500);
+    };
+    this.later(tick, 6000);
     this.later(() => {
       if (this.s.phase === "connecting" && this.s.call) {
         void api({ action: "failed", id: this.s.call.id });
@@ -698,7 +726,7 @@ export class CallEngine {
               ? "No answer"
               : "Missed call"
             : call.status === "failed"
-              ? "Couldn't connect"
+              ? this.whyNot()
               : "Call ended";
       return this.finish(reason);
     }
