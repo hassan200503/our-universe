@@ -103,14 +103,20 @@ async function testCallsHere(): Promise<string> {
   const found = new Set<string>();
   try {
     pc.createDataChannel("test");
-    await new Promise<void>((resolve) => {
+    const done = new Promise<void>((resolve) => {
       pc.onicecandidate = (e) => {
-        if (e.candidate?.type) found.add(e.candidate.type);
+        if (e.candidate) {
+          // `type` is missing in some browsers; the candidate line always says "typ <type>".
+          const type = e.candidate.type ?? / typ (\w+)/.exec(e.candidate.candidate)?.[1];
+          if (type) found.add(type);
+        }
         if (!e.candidate || found.has("relay")) resolve();
       };
-      setTimeout(resolve, 9000);
+      setTimeout(resolve, 12000);
     });
+    // Routes are only looked for once the offer is set, so set it first, then wait for them.
     await pc.setLocalDescription(await pc.createOffer());
+    await done;
   } finally {
     pc.close();
   }

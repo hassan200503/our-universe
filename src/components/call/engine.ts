@@ -464,7 +464,8 @@ export class CallEngine {
     };
     pc.onicecandidate = (e) => {
       if (!e.candidate) return;
-      if (e.candidate.type) this.candTypes.mine.add(e.candidate.type);
+      const type = e.candidate.type ?? / typ (\w+)/.exec(e.candidate.candidate)?.[1];
+      if (type) this.candTypes.mine.add(type);
       this.outgoingIce.push(e.candidate.toJSON());
       this.iceFlush ??= setTimeout(() => this.flushIce(), 120);
     };
