@@ -13,7 +13,7 @@ import { JourneyClock } from "@/components/home/journey-clock";
 import { RememberLines } from "@/components/home/remember";
 import { Orbit, Starfield } from "@/components/home/sky";
 import { Avatar } from "@/components/avatar";
-import { IconArrowRight, IconCompass, IconHeart, IconImage, IconMessage, IconSparkle, Monogram } from "@/components/icons";
+import { IconArrowRight, IconCompass, IconFlask, IconHeart, IconImage, IconMessage, IconSparkle, Monogram } from "@/components/icons";
 import { personTopics, todaysDiscovery, type TrendCard } from "@/lib/trends/query";
 import { TOPICS, type TopicKey } from "@/lib/trends/topics";
 import { TrendCardView } from "@/components/feed/trend-card";
@@ -456,6 +456,30 @@ export default async function Home() {
             </Link>
           ))}
         </nav>
+      </section>
+
+      {/* ── CURIOUS TOGETHER ───────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-4 pt-16 sm:pt-24">
+        <div className="tile relative overflow-hidden p-6 sm:p-10">
+          <div className="pointer-events-none absolute -right-24 -top-24 size-72 rounded-full bg-gold-soft blur-3xl" aria-hidden />
+          <div className="relative grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-end">
+            <div>
+              <p className="eyebrow-lux">Curious together</p>
+              <h2 className="font-lux mt-3 text-[2.2rem] font-medium leading-[1.05] tracking-tight sm:text-[3rem]">Research anything</h2>
+              <p className="mt-3 max-w-md text-muted">Real studies read and cited, lessons that check you understood, and the simple version when that&apos;s all you need.</p>
+            </div>
+            <form action="/research" className="flex items-end gap-2 rounded-[1.4rem] border border-line bg-surface p-2 pl-4">
+              <label htmlFor="home-research" className="sr-only">
+                Ask a research question
+              </label>
+              <input id="home-research" name="q" required minLength={2} maxLength={2000} placeholder="What does the research say about…" className="min-w-0 flex-1 bg-transparent py-2.5 text-[0.98rem] outline-none placeholder:text-muted/80" />
+              <button className="btn shrink-0" aria-label="Research">
+                <IconFlask size={16} />
+                <span className="max-sm:hidden">Research</span>
+              </button>
+            </form>
+          </div>
+        </div>
       </section>
 
       {/* ── CLOSE ─────────────────────────────────────────────────── */}

@@ -31,6 +31,7 @@ Hassan's world, Whitney's world, and the story they're writing together, plus li
 | Topic feeds with category filters: software, technology, philosophy, nature, biotech, birds, knitting, environment | `/discover/[topic]` |
 | Something We Both Might Like: items touching both a technology and a life-science thread | `/discover/together` |
 | Things We Are Learning (shared) | `/learning` |
+| Research: real studies read and cited, step-by-step lessons with a quiz, or the simple version; share threads with each other | `/research` |
 | Weekly digest (any past week) | `/digest` |
 | Global search | `/search` |
 | Personalisation: interests, favourite topics, muted/starred sources, hidden categories and keywords | `/settings` |
@@ -51,6 +52,13 @@ Everything personal has a visibility: 🔒 **private** (owner only), 💞 **shar
 - **Typing and receipts** come from `chat_state`: `typing_until` for the dots, `last_delivered_id` (set when a partner's device fetches) and `last_read_id` (set while the chat is on screen) for ✓, ✓✓ and blue ✓✓.
 - **Calls** are peer-to-peer WebRTC: audio and video go directly between the two browsers, encrypted end to end. The server only relays the handshake (`calls`, `call_signals`) through `/api/call`. Every call negotiates both audio and video, so turning the camera on mid-call is instant; a data channel carries mute, camera and hang-up; the caller restarts ICE when a network changes. Calls ring anywhere on the site within a few seconds (the pulse checks in every 3 s while your partner is online), and each call leaves a line in the chat.
 - **Alerts like a phone's messenger** use Web Push (`public/sw.js`): calls ring (and keep ringing every few seconds until answered, declined or missed) and messages pop up, even when the site is closed or nobody is signed in on that device. After signing in on a new device, a "Stay within reach" sheet asks to turn them on (on iPhone it shows the Add to Home Screen steps first); Settings → Calls & alerts and a banner in Messages do the same. Subscriptions refresh on every visit and survive signing out. "Decline" on a call notification carries a signed token, so it works on a signed-out device; "Answer" opens the call (through sign-in if needed). The app icon shows the unread count. VAPID keys are derived from the session secret, so there is nothing to configure.
+
+## Research
+
+- **Ask anything** at `/research` in one of three modes: *Research studies* (finds papers in [OpenAlex](https://openalex.org), a free index of 250M+ scholarly works, and has Gemini synthesise them with numbered citations that open each study), *Learn it* (a step-by-step lesson ending in a self-check) and *Explain simply*. Answers stream in as they're written, with three follow-up questions to go further.
+- **Threads** keep the conversation, so follow-ups have context. Share a thread and it appears in your partner's Research too; they can read it and ask follow-ups. **Quiz me** writes five multiple-choice questions on what a thread covered. **Save to learning** keeps an answer in Things We Are Learning.
+- **Gemini** (`src/lib/research/gemini.ts`) tries each model in `GEMINI_MODELS` until one answers, first with Google Search grounding, then without; a model that says "busy" waits at the back of the queue for a minute. When grounding is used, Google's search suggestions are shown with the answer, as Google requires.
+- **Keys** come from `GEMINI_API_KEY`, or from Settings → AI research, where the key is checked with Google and stored sealed (AES-256-GCM) in the `kv` table (`src/lib/settings.ts`). The call relay in Settings → Call relay is stored the same way. Neither ever reaches the browser.
 
 ## The Live Trends Engine
 

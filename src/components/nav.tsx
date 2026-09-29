@@ -15,7 +15,7 @@ export async function Nav() {
     { href: "/together", label: "Together", badge: "together" as const },
     ...ctx.members.map((m) => ({ href: `/world/${m.slug}`, label: `${m.displayName.split(" ")[0]}'s World` })),
     { href: "/discover", label: "For You" },
-    { href: "/learning", label: "Learning" },
+    { href: "/research", label: "Research" },
   ];
   return (
     <>

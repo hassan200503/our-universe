@@ -589,3 +589,55 @@ export const kv = pgTable("kv", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   updatedAt: updatedAt(),
 });
+
+// ─── Research: questions answered with live sources ───────────────────────
+
+/** A line of inquiry: private to its owner unless shared with the other person. */
+export const researchThreads = pgTable(
+  "research_threads",
+  {
+    id: id(),
+    relationshipId: uuid("relationship_id").notNull().references(() => relationships.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** research | learn | explain */
+    mode: text("mode").notNull().default("research"),
+    shared: boolean("shared").notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("research_threads_rel_updated").on(t.relationshipId, t.updatedAt)],
+);
+
+/** A study found in the scholarly index (cited as [n]) or a web page Google Search grounded the answer in. */
+export type ResearchSource = {
+  kind: "study" | "web";
+  title: string;
+  uri: string;
+  domain: string;
+  n?: number;
+  year?: number | null;
+  authors?: string;
+  venue?: string | null;
+  citations?: number;
+};
+
+export const researchMessages = pgTable(
+  "research_messages",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    threadId: uuid("thread_id").notNull().references(() => researchThreads.id, { onDelete: "cascade" }),
+    /** user | model */
+    role: text("role").notNull(),
+    content: text("content").notNull(),
+    sources: jsonb("sources").$type<ResearchSource[]>().notNull().default([]),
+    queries: text("queries").array().notNull().default(sql`'{}'::text[]`),
+    followUps: text("follow_ups").array().notNull().default(sql`'{}'::text[]`),
+    /** Google's search-suggestion chips, shown with grounded answers as its terms require. */
+    searchWidget: text("search_widget"),
+    model: text("model"),
+    grounded: boolean("grounded").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("research_messages_thread").on(t.threadId, t.id)],
+);
